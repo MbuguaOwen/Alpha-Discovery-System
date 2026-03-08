@@ -1,0 +1,80 @@
+symbols:
+  - XAUUSD
+  - XAGUSD
+timeframe: m30
+metadata:
+  source_truth: exact_pine_definition
+  execution_truth: exact_pine_or_verified_parity_only
+  config_pack: pine16_forwardsign_m30_xau_xag_london
+  tv_strategy_name: "16. Divergence Feature Discovery System - LONG ONLY (Baseline + Toggles) [v6 FIXED + Session Gate]"
+data:
+  parquet_roots:
+    - data/derived/dukascopy
+    - data/dukascopy
+  csv_inputs: {}
+  years: [2022, 2023, 2024, 2025]
+strategy:
+  core:
+    donLen: 120
+    pivotLen: 5
+    oscLen: 14
+    extBandPct: 0.15
+  safety:
+    useConfirmedOnly: true
+    warmupBars: 500
+    cooldownBars: 0
+  trading:
+    mode: TRADE
+    tradeMode: GATED
+    entryMode: Confirm(BOS)
+    oneTradeAtATime: true
+  risk:
+    atrLen: 14
+    slAtrMult: 1.0
+    rrMult: 3.0
+  features:
+    useMinOscStrength: false
+    minOscChangePct: 15.0
+    useMinPivotGap: false
+    minPivotGapBars: 30
+    classicOnly: false
+    useDailyEma200Gate: false
+    useDailyEmaSlopeUp: false
+    useDailyAdxGate: false
+    dailyDmiLen: 14
+    dailyAdxMin: 18.0
+    useDailyDiGate: false
+    useVolPivotGate: false
+    minVolRatioPivot: 1.0
+    useVolEntryGate: true
+    minVolRatioEntry: 1.0
+    useAtrRatioGate: false
+    atrRatioMax: 4.0
+    useVolBehaviorGate: false
+    volLookback: 40
+    minUpDownVolRatio: 1.25
+    requireContraction: true
+    maxPullbackVsImpulse: 0.85
+    useBOSConfirm: true
+    bosAtrBuffer: 0.10
+    maxWaitBars: 15
+    useCvdGate: false
+    cvdLenMin: 60
+    cvdThreshold: 0.0
+    useVolSpikeGate: false
+    volSmaLen: 50
+    volMult: 1.5
+    requireBullCandle: true
+    useWv70Gate: false
+    w_analyzeBars: 70
+    w_rowCount: 50
+    w_swingLen: 10
+    w_volumeWeight: Recent
+    w_bullThreshPct: 70.0
+  session:
+    useSessionGate: true
+    useNY: false
+    useLondon: true
+    useTokyo: false
+    useSydney: false
+    tz: Etc/GMT-3

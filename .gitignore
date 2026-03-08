@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.python-version
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Project archives and legacy moved artifacts
+archive/
+
+# Raw external exports
+tv_exports/
+
+# Generated data: keep only current forward-sign master parquet
+data/derived/*
+!data/derived/pine16_exact/
+data/derived/pine16_exact/*
+!data/derived/pine16_exact/forward_sign_24h_72h_master.parquet
+
+# Reports/outputs: ignore by default, keep current locked finding artifacts
+outputs/*
+!outputs/audit_pine16_forward_sign_24h_72h.md
+!outputs/reports/
+outputs/reports/*
+!outputs/reports/FINDING_LOCKED_PINE16_FORWARD_SIGN_24H_72H.md
+!outputs/reports/pine16_forward_sign_24h_72h_*
+!outputs/submission/
+outputs/submission/*
+!outputs/submission/pine16_forward_sign_LOCKED_FINDING_CLEAN_*.zip
+

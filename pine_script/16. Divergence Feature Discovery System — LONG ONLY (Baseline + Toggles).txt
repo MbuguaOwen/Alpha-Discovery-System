@@ -1,0 +1,583 @@
+//@version=6
+strategy(
+     "16. Divergence Feature Discovery System — LONG ONLY (Baseline + Toggles) [v6 FIXED + Session Gate]",
+     overlay=true,
+     process_orders_on_close=true,
+     pyramiding=0,
+     calc_on_every_tick=false,
+     max_labels_count=500,
+     max_lines_count=500,
+     max_boxes_count=200,
+     max_bars_back=3000
+)
+
+//═════════════════════════════════════════════════════════════
+// 📊 INPUTS (aligned to #05)
+//═════════════════════════════════════════════════════════════
+grpCore = "Core"
+donLen     = input.int(120, "Donchian Length", minval=20, maxval=500, group=grpCore)
+pivotLen   = input.int(5,   "Pivot Lookback",  minval=2,  maxval=20, group=grpCore)
+oscLen     = input.int(14,  "Oscillator Length", minval=1, maxval=200, group=grpCore)
+extBandPct = input.float(0.15, "Extreme Band %", minval=0.05, maxval=0.40, group=grpCore)
+
+// Display
+grpDisp = "Display"
+showFeatures       = input.bool(true,  "Show Feature Analysis on Divergences", group=grpDisp)
+showDivLines       = input.bool(true,  "Show Divergence Lines",               group=grpDisp)
+showExtremeBands   = input.bool(true,  "Show Extreme Bands",                  group=grpDisp)
+showVolumeInfo     = input.bool(true,  "Show Volume Info",                    group=grpDisp)
+showMomentumInfo   = input.bool(true,  "Show Momentum Info",                  group=grpDisp)
+colorByDivStrength = input.bool(true,  "Color by Divergence Strength",        group=grpDisp)
+showZones          = input.bool(false, "Show potential entry zones",          group=grpDisp)
+
+// Safety / execution
+grpSafe = "Safety"
+useConfirmedOnly = input.bool(true,  "Confirmed bars only", group=grpSafe)
+warmupBars       = input.int(500,    "Warmup bars",         minval=0, group=grpSafe)
+cooldownBars     = input.int(0,      "Cooldown bars after entry", minval=0, maxval=500, group=grpSafe)
+
+okBar  = useConfirmedOnly ? barstate.isconfirmed : true
+warmed = bar_index >= warmupBars
+
+var int lastEntryBar = na
+cooldownOk = cooldownBars <= 0 or na(lastEntryBar) or (bar_index - lastEntryBar) >= cooldownBars
+
+grpTrade = "Trading"
+mode      = input.string("ANALYZE", "Mode", options=["ANALYZE","TRADE"], group=grpTrade)
+tradeMode = input.string("BASELINE_ALL", "Trade Mode", options=["BASELINE_ALL","GATED"], group=grpTrade)
+entryMode = input.string("Raw", "Entry Mode", options=["Raw","Confirm(BOS)"], group=grpTrade)
+oneTradeAtATime = input.bool(true, "One trade at a time", group=grpTrade)
+
+// Risk (standardized)
+grpRisk = "Risk (standardized)"
+atrLen    = input.int(14, "ATR Length", minval=1, group=grpRisk)
+slAtrMult = input.float(1.0, "Stop = ATR *", step=0.1, group=grpRisk)
+rrMult    = input.float(3.0, "R multiple (TP = SL * R)", step=0.1, group=grpRisk)
+
+//═════════════════════════════════════════════════════════════
+// 🧩 FEATURE TOGGLES (OFF by default)
+//═════════════════════════════════════════════════════════════
+grpF = "Feature Toggles (OFF by default)"
+
+// Divergence quality
+useMinOscStrength = input.bool(false, "Gate: Min osc divergence strength", group=grpF)
+minOscChangePct   = input.float(15.0, "  Min oscChange %", step=1.0, group=grpF)
+useMinPivotGap    = input.bool(false, "Gate: Min bars since last pivot", group=grpF)
+minPivotGapBars   = input.int(30, "  Min bars gap", minval=1, group=grpF)
+classicOnly       = input.bool(false, "Gate: Classic only (LL + HL)", group=grpF)
+
+// Daily regime (EMA200 + ADX/DI)
+useDailyEma200Gate = input.bool(false, "Gate: Daily close above EMA200", group=grpF)
+useDailyEmaSlopeUp = input.bool(false, "  Require Daily EMA200 rising", group=grpF)
+
+useDailyAdxGate    = input.bool(false, "Gate: Daily ADX >= threshold", group=grpF)
+dailyDmiLen        = input.int(14, "  Daily DMI/ADX length", minval=1, group=grpF)
+dailyAdxMin        = input.float(18.0, "  Min Daily ADX", step=0.5, group=grpF)
+
+useDailyDiGate     = input.bool(false, "Gate: Daily +DI > -DI", group=grpF)
+
+// Volume gates
+useVolPivotGate   = input.bool(false, "Gate: Min volRatio at pivot (vs SMA20)", group=grpF)
+minVolRatioPivot  = input.float(1.0, "  Min pivot volRatio", step=0.1, group=grpF)
+
+useVolEntryGate   = input.bool(false, "Gate: Min volRatio at entry (vs SMA20)", group=grpF)
+minVolRatioEntry  = input.float(1.0, "  Min entry volRatio", step=0.1, group=grpF)
+
+// Volatility regime
+useAtrRatioGate   = input.bool(false, "Gate: ATR ratio cap (ATR14/ATR50)", group=grpF)
+atrRatioMax       = input.float(1.2, "  Max ATR ratio", step=0.05, group=grpF)
+
+// Volume behavior gate
+useVolBehaviorGate   = input.bool(false, "Gate: Volume behavior (upVol dominates + pullback contracts)", group=grpF)
+volLookback          = input.int(40, "  Lookback bars", minval=10, group=grpF)
+minUpDownVolRatio    = input.float(1.25, "  Min (UpVol / DownVol)", step=0.05, group=grpF)
+requireContraction   = input.bool(true, "  Require pullback contraction", group=grpF)
+maxPullbackVsImpulse = input.float(0.85, "  Max (AvgDownVol / AvgUpVol)", step=0.05, group=grpF)
+
+// Confirm mode
+useBOSConfirm   = input.bool(false, "Confirm: Require BOS trigger (Confirm mode)", group=grpF)
+bosAtrBuffer    = input.float(0.10, "  BOS buffer (x ATR)", step=0.05, group=grpF)
+maxWaitBars     = input.int(30, "  Max bars to wait for BOS", minval=5, maxval=200, group=grpF)
+
+// CVD proxy gate (1m)
+useCvdGate      = input.bool(false, "Gate: CVD proxy >= threshold (1m rollsum)", group=grpF)
+cvdLenMin       = input.int(60, "  CVD window (minutes)", minval=10, maxval=240, group=grpF)
+cvdThreshold    = input.float(0.0, "  CVD threshold (>=)", step=1.0, group=grpF)
+
+// Vol spike gate
+useVolSpikeGate   = input.bool(false, "Gate: Volume spike on entry (vol >= x*SMA)", group=grpF)
+volSmaLen         = input.int(50, "  Vol SMA len", minval=5, group=grpF)
+volMult           = input.float(1.5, "  Spike multiplier", step=0.1, group=grpF)
+requireBullCandle = input.bool(true, "  Require bullish candle on entry", group=grpF)
+
+// (Optional, heavy) WV bull% gate — kept but OFF by default
+useWv70Gate     = input.bool(false, "Gate: WV bull% >= threshold (heavy)", group=grpF)
+w_analyzeBars   = input.int(70, "  WV Analyze Bars", minval=10, maxval=1000, group=grpF)
+w_rowCount      = input.int(50, "  WV Row Count", minval=10, maxval=200, group=grpF)
+w_swingLen      = input.int(10, "  WV Swing Length", minval=1, group=grpF)
+w_volumeWeight  = input.string("Recent", "  WV Volume Weighting", options=["Recent","Normal","Past"], group=grpF)
+w_bullThreshPct = input.float(70.0, "  WV Bull% threshold", minval=0, maxval=100, group=grpF)
+
+//─────────────────────────────────────────────────────────────
+// SESSION FILTER  (all times shown as UTC+3 clock hours)
+// NY  :  16:30 – 23:00  UTC+3
+// LDN :  11:00 – 19:30  UTC+3
+// TYO :  03:00 – 12:00  UTC+3
+// SYD :  01:00 – 10:00  UTC+3
+//
+// Notes:
+// - We evaluate clock time in a fixed UTC+3 timezone regardless of chart timezone.
+// - TradingView timezone string: "Etc/GMT-3" corresponds to UTC+3.
+//─────────────────────────────────────────────────────────────
+grpSess = "Session Filter (times = UTC+3)"
+useSessionGate = input.bool(true,  "Gate: Session filter",           group=grpSess)
+useNY          = input.bool(true,  "  🗽 New York   16:30 – 23:00",  group=grpSess)
+useLondon      = input.bool(false, "  🇬🇧 London    11:00 – 19:30",  group=grpSess)
+useTokyo       = input.bool(false, "  🗼 Tokyo      03:00 – 12:00",  group=grpSess)
+useSydney      = input.bool(false, "  🦘 Sydney     01:00 – 10:00",  group=grpSess)
+
+tzSess = "Etc/GMT-3"
+anySessEnabled = useNY or useLondon or useTokyo or useSydney
+
+f_inRangeHM(hm_val, startHM, endHM) =>
+    // Supports wrap-around (e.g. crossing midnight)
+    startHM <= endHM ? (hm_val >= startHM and hm_val <= endHM) : (hm_val >= startHM or hm_val <= endHM)
+
+f_inSessionAt(t) =>
+    // Bypass when gate is OFF, or when gate is ON but user forgot to tick any session.
+    if (not useSessionGate) or (useSessionGate and not anySessEnabled)
+        true
+    else
+        int h  = hour(t, tzSess)
+        int m  = minute(t, tzSess)
+        int hm = h * 100 + m
+        bool nyOk     = useNY     and f_inRangeHM(hm, 1630, 2300)
+        bool londonOk = useLondon and f_inRangeHM(hm, 1100, 1930)
+        bool tokyoOk  = useTokyo  and f_inRangeHM(hm,  300, 1200)
+        bool sydneyOk = useSydney and f_inRangeHM(hm,  100, 1000)
+        nyOk or londonOk or tokyoOk or sydneyOk
+
+// Gate divergence signals against the PIVOT bar's time (time[pivotLen])
+sessionOkAtPivot = f_inSessionAt(time[pivotLen])
+
+// Current-bar session check — used only for BOS confirm trigger
+sessionOk = f_inSessionAt(time)
+
+//═════════════════════════════════════════════════════════════
+// 🔧 PORTABLE HELPERS (NO ta.sum / NO ta.adx / NO ta.plus_di)
+//═════════════════════════════════════════════════════════════
+
+// Rolling sum using SMA * len (portable)
+f_rsum(x, len) =>
+    ta.sma(x, len) * len
+
+// True Range (portable)
+f_tr() =>
+    float a = high - low
+    float b = math.abs(high - close[1])
+    float c = math.abs(low  - close[1])
+    math.max(a, math.max(b, c))
+
+// Wilder DMI/ADX (portable)
+f_dmi_adx(_len) =>
+    upMove   = high - high[1]
+    downMove = low[1] - low
+
+    plusDM  = (upMove > downMove and upMove > 0) ? upMove : 0.0
+    minusDM = (downMove > upMove and downMove > 0) ? downMove : 0.0
+
+    tr  = f_tr()
+    atr = ta.rma(tr, _len)
+
+    pDM = ta.rma(plusDM, _len)
+    mDM = ta.rma(minusDM, _len)
+
+    pDI = atr > 0 ? 100.0 * (pDM / atr) : 0.0
+    mDI = atr > 0 ? 100.0 * (mDM / atr) : 0.0
+
+    sumDI = pDI + mDI
+    dx = sumDI > 0 ? 100.0 * math.abs(pDI - mDI) / sumDI : 0.0
+    adx = ta.rma(dx, _len)
+
+    [pDI, mDI, adx]
+
+//═════════════════════════════════════════════════════════════
+// CORE CALCS (aligned to #05)
+//═════════════════════════════════════════════════════════════
+donHi = ta.highest(high, donLen)
+donLo = ta.lowest(low,  donLen)
+rng   = donHi - donLo
+loc   = rng > 0 ? (close - donLo) / rng : 0.5
+
+upperBand = donLo + rng * (1.0 - extBandPct)
+lowerBand = donLo + rng * extBandPct
+
+plot(showExtremeBands ? donHi : na, "Donchian High", color=color.new(color.blue, 70))
+plot(showExtremeBands ? donLo : na, "Donchian Low",  color=color.new(color.blue, 70))
+plot(showExtremeBands ? upperBand : na, "Upper Extreme", color=color.new(color.red, 80), style=plot.style_circles)
+plot(showExtremeBands ? lowerBand : na, "Lower Extreme", color=color.new(color.lime, 80), style=plot.style_circles)
+
+// Oscillator used in #05
+osc = ta.ema((close - open) * volume, oscLen)
+
+// Features
+avgVol20 = ta.sma(volume, 20)
+avgVol50 = ta.sma(volume, 50)
+volRatio20 = avgVol20 > 0 ? (volume / avgVol20) : 1.0
+volRatio50 = avgVol50 > 0 ? (volume / avgVol50) : 1.0
+volTrend = avgVol20 > avgVol50 ? "Rising" : "Falling"
+
+rsi14 = ta.rsi(close, 14)
+rsi7  = ta.rsi(close, 7)
+
+macd = ta.ema(close, 12) - ta.ema(close, 26)
+macdSignal = ta.ema(macd, 9)
+macdHist   = macd - macdSignal
+
+atr14 = ta.atr(14)
+atr50 = ta.atr(50)
+atrRatio = atr50 > 0 ? (atr14 / atr50) : 1.0
+volatilityState = atrRatio > 1.2 ? "High" : (atrRatio < 0.8 ? "Low" : "Normal")
+
+ema20  = ta.ema(close, 20)
+ema50  = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+trendState = ema20 > ema50 ? "Bullish" : "Bearish"
+
+oscHigh100 = ta.highest(osc, 100)
+oscLow100  = ta.lowest(osc, 100)
+oscRange100= oscHigh100 - oscLow100
+oscPercentile = oscRange100 > 0 ? ((osc - oscLow100) / oscRange100) * 100 : 50
+
+bullishBars3 = (close[1] > open[1] ? 1 : 0) + (close[2] > open[2] ? 1 : 0) + (close[3] > open[3] ? 1 : 0)
+bearishBars3 = (close[1] < open[1] ? 1 : 0) + (close[2] < open[2] ? 1 : 0) + (close[3] < open[3] ? 1 : 0)
+recentMomentum = bullishBars3 > bearishBars3 ? "Bullish" : (bearishBars3 > bullishBars3 ? "Bearish" : "Neutral")
+
+isDoji      = math.abs(close - open) < (high - low) * 0.1
+isHammer    = (close > open) and ((high - close) < (close - open) * 0.3) and ((open - low) > (close - open) * 2)
+isEngulfing = (close > open and close[1] < open[1] and close > open[1] and open < close[1])
+
+atr = ta.atr(atrLen)
+
+// Precompute highest for BOS warning (call each bar)
+bosHighest = ta.highest(high, pivotLen)
+
+//═════════════════════════════════════════════════════════════
+// DAILY REGIME (portable ADX/DI via f_dmi_adx)
+//═════════════════════════════════════════════════════════════
+dClose  = request.security(syminfo.tickerid, "D", close, barmerge.gaps_off, barmerge.lookahead_off)
+dEma200 = request.security(syminfo.tickerid, "D", ta.ema(close, 200), barmerge.gaps_off, barmerge.lookahead_off)
+[dPdi, dMdi, dAdx] = request.security(syminfo.tickerid, "D", f_dmi_adx(dailyDmiLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+dailyEmaOk   = (not useDailyEma200Gate) or (dClose > dEma200)
+dailySlopeOk = (not useDailyEmaSlopeUp) or (dEma200 > dEma200[1])
+dailyAdxOk   = (not useDailyAdxGate) or (dAdx >= dailyAdxMin)
+dailyDiOk    = (not useDailyDiGate) or (dPdi > dMdi)
+
+//═════════════════════════════════════════════════════════════
+// VOLUME BEHAVIOR GATE (NO ta.sum -> f_rsum)
+//═════════════════════════════════════════════════════════════
+upVol   = close > open ? volume : 0.0
+downVol = close < open ? volume : 0.0
+
+sumUp   = f_rsum(upVol,   volLookback)
+sumDown = f_rsum(downVol, volLookback)
+
+upDownRatio = sumDown > 0 ? (sumUp / sumDown) : 999.0
+
+upCnt   = f_rsum(close > open ? 1.0 : 0.0, volLookback)
+downCnt = f_rsum(close < open ? 1.0 : 0.0, volLookback)
+
+avgUpVol   = upCnt > 0 ? (sumUp / upCnt) : 0.0
+avgDownVol = downCnt > 0 ? (sumDown / downCnt) : 0.0
+
+contractionOk = (not requireContraction) or (avgUpVol > 0 and (avgDownVol / avgUpVol) <= maxPullbackVsImpulse)
+volBehaviorOk = (upDownRatio >= minUpDownVolRatio) and contractionOk
+volBehaviorPass = (not useVolBehaviorGate) or volBehaviorOk
+
+//═════════════════════════════════════════════════════════════
+// CVD PROXY (1m) — use f_rsum inside security
+//═════════════════════════════════════════════════════════════
+cvd1m = request.security(
+     syminfo.tickerid,
+     "1",
+     f_rsum(close >= open ? volume : -volume, cvdLenMin),
+     barmerge.gaps_off,
+     barmerge.lookahead_off
+)
+cvdOk = (not useCvdGate) or (cvd1m >= cvdThreshold)
+
+//═════════════════════════════════════════════════════════════
+// VOL SPIKE GATE
+//═════════════════════════════════════════════════════════════
+volSma   = ta.sma(volume, volSmaLen)
+volSpike = volume >= volSma * volMult
+bullC    = close > open
+volSpikeOk = (not useVolSpikeGate) or (volSpike and (not requireBullCandle or bullC))
+
+//═════════════════════════════════════════════════════════════
+// WV 70% BULL DOMINANCE (heavy; OFF by default)
+//═════════════════════════════════════════════════════════════
+w_weightImpact = 0.85
+w_weighted_vol(i, baseVol) =>
+    float vol = baseVol
+    if w_volumeWeight == "Recent"
+        vol := ((vol * w_weightImpact) / (i + 1)) + (vol * (1.0 - w_weightImpact))
+    else if w_volumeWeight == "Past"
+        vol := ((vol * w_weightImpact) * ((i + 1) / w_analyzeBars)) + (vol * (1.0 - w_weightImpact))
+    vol
+
+w_inRow(rowTop, rowBot, hi, lo) =>
+    not (lo > rowTop or hi < rowBot)
+
+w_pvHigh = ta.pivothigh(high, w_swingLen, w_swingLen)
+w_pvLow  = ta.pivotlow(low,  w_swingLen, w_swingLen)
+
+var float w_vph = na
+var float w_vpl = na
+w_vph := nz(w_pvHigh, w_vph)
+w_vpl := nz(w_pvLow,  w_vpl)
+
+w_pivotsOk = not na(w_vph) and not na(w_vpl) and math.abs(w_vph - w_vpl) > atr * 5
+
+var float   w_vpTop = na
+var float   w_vpBot = na
+var float   w_step  = na
+var float[] w_bullVol = array.new_float()
+var float[] w_totVol  = array.new_float()
+
+w_resetArrays() =>
+    array.clear(w_bullVol)
+    array.clear(w_totVol)
+    for r0 = 0 to w_rowCount - 1
+        array.push(w_bullVol, 0.0)
+        array.push(w_totVol,  0.0)
+
+var float bullPctAtPrice = na
+
+if useWv70Gate and okBar and w_pivotsOk and warmed
+    w_vpTop := w_vph
+    w_vpBot := w_vpl
+    w_step  := (w_vpTop - w_vpBot) / w_rowCount
+    w_resetArrays()
+
+    for i = 0 to w_analyzeBars
+        hi = high[i]
+        lo = low[i]
+        vv = w_weighted_vol(i, volume[i])
+        for r = 0 to w_rowCount - 1
+            rowTop = w_vpTop - w_step * r
+            rowBot = rowTop - w_step
+            if w_inRow(rowTop, rowBot, hi, lo)
+                if close[i] > open[i]
+                    array.set(w_bullVol, r, array.get(w_bullVol, r) + vv)
+                array.set(w_totVol,  r, array.get(w_totVol,  r) + vv)
+
+    bullPctAtPrice := na
+    if not na(w_step) and w_step != 0
+        for r = 0 to w_rowCount - 1
+            rowTop = w_vpTop - w_step * r
+            rowBot = rowTop - w_step
+            if close <= rowTop and close >= rowBot
+                tv = array.get(w_totVol, r)
+                bv = array.get(w_bullVol, r)
+                bullPctAtPrice := tv > 0 ? (bv / tv) * 100.0 : na
+
+wv70Ok = (not useWv70Gate) or (okBar and not na(bullPctAtPrice) and bullPctAtPrice >= w_bullThreshPct)
+
+//═════════════════════════════════════════════════════════════
+// PIVOTS + MEMORY (long-only baseline)
+//═════════════════════════════════════════════════════════════
+pL = ta.pivotlow(low, pivotLen, pivotLen)
+
+var float lastPL_price = na
+var float lastPL_osc   = na
+var int   lastPL_bar   = na
+
+// Confirm-mode state
+var bool  longSetup  = false
+var float longTrig   = na
+var float setupPivot = na
+var int   setupBar   = na
+var bool  setupPass  = false
+var box   zoneBox    = na
+
+// Signals
+var bool longSignal = false
+longSignal := false
+
+// Stats
+var int totalDivergences = 0
+var int totalSetups      = 0
+var int totalEntries     = 0
+
+//═════════════════════════════════════════════════════════════
+// LONG DIVERGENCE DETECTION + LABELS + GATES
+//═════════════════════════════════════════════════════════════
+if okBar and warmed and not na(pL)
+    pl_price = low[pivotLen]
+    pl_osc   = osc[pivotLen]
+    loc_p    = loc[pivotLen]
+    pl_bar   = bar_index - pivotLen
+
+    nearLower    = loc_p <= extBandPct
+    hasPrevPivot = not na(lastPL_price)
+    bullDiv      = hasPrevPivot and (pl_price <= lastPL_price) and (pl_osc > lastPL_osc)
+
+    if nearLower and bullDiv
+        totalDivergences += 1
+
+        // Divergence metrics (pivot-time)
+        priceChange = ((pl_price - lastPL_price) / lastPL_price) * 100.0
+        denOsc      = math.max(math.abs(lastPL_osc), 1e-10)
+        oscChange   = ((pl_osc - lastPL_osc) / denOsc) * 100.0
+        barsFromLastPivot = bar_index - lastPL_bar
+        divType = pl_price < lastPL_price ? "Classic" : "Equal"
+
+        // Pivot-time volume
+        volAtPivot = volume[pivotLen]
+        av20p      = avgVol20[pivotLen]
+        volRatioAtPivot = av20p > 0 ? (volAtPivot / av20p) : 1.0
+
+        // Entry-time conditions
+        volAtEntry = volRatio20
+        atrAtEntry = atrRatio
+
+        // Color by strength
+        lineColor  = color.lime
+        labelColor = color.lime
+        if colorByDivStrength
+            if oscChange >= 50
+                lineColor := color.new(color.lime, 0)
+                labelColor := color.new(color.lime, 10)
+            else if oscChange >= 30
+                lineColor := color.new(color.green, 20)
+                labelColor := color.new(color.green, 30)
+            else if oscChange >= 15
+                lineColor := color.new(color.yellow, 30)
+                labelColor := color.new(color.yellow, 40)
+            else
+                lineColor := color.new(color.orange, 40)
+                labelColor := color.new(color.orange, 50)
+
+        if showDivLines and hasPrevPivot
+            line.new(lastPL_bar, lastPL_price, pl_bar, pl_price, color=lineColor, width=2)
+
+        if showFeatures
+            labelText = "🟢 LONG DIV (" + divType + ")\n"
+            labelText += "OscΔ%: +" + str.tostring(oscChange, "#.#") + " | Price%: " + str.tostring(priceChange, "#.##") + "\n"
+            labelText += "BarsGap: " + str.tostring(barsFromLastPivot) + " | Don%: " + str.tostring(loc_p * 100.0, "#.#") + "\n"
+            if showVolumeInfo
+                labelText += "Vol Pivot: " + str.tostring(volRatioAtPivot, "#.##") + "x | Vol Entry: " + str.tostring(volAtEntry, "#.##") + "x | " + volTrend + "\n"
+            if showMomentumInfo
+                labelText += "RSI: " + str.tostring(rsi14[pivotLen], "#") + "→" + str.tostring(rsi14, "#") + " | MACD: " + str.tostring(macd[pivotLen], "#.###") + "\n"
+                labelText += "Osc%ile: " + str.tostring(((osc[pivotLen] - oscLow100[pivotLen]) / math.max(oscRange100[pivotLen], 1e-10)) * 100.0, "#") + " | ATRr: " + str.tostring(atrAtEntry, "#.##") + " (" + volatilityState + ")\n"
+                labelText += "Trend: " + trendState + " | Mom: " + recentMomentum + "\n"
+                labelText += "Candle: " + (isHammer ? "Hammer" : (isDoji ? "Doji" : (isEngulfing ? "Engulf" : "—"))) + "\n"
+
+            label.new(pl_bar, pl_price, labelText, style=label.style_label_up, color=labelColor, textcolor=color.white, size=size.tiny)
+
+        // Gates
+        g_oscStrength = (not useMinOscStrength) or (oscChange >= minOscChangePct)
+        g_pivotGap    = (not useMinPivotGap) or (barsFromLastPivot >= minPivotGapBars)
+        g_classic     = (not classicOnly) or (divType == "Classic")
+
+        g_volPivot    = (not useVolPivotGate) or (volRatioAtPivot >= minVolRatioPivot)
+        g_volEntry    = (not useVolEntryGate) or (volAtEntry >= minVolRatioEntry)
+
+        g_atrRatio    = (not useAtrRatioGate) or (atrAtEntry <= atrRatioMax)
+
+        g_regime      = dailyEmaOk and dailySlopeOk and dailyAdxOk and dailyDiOk
+        g_session     = (not useSessionGate) or sessionOkAtPivot
+        g_flow        = cvdOk and wv70Ok and volBehaviorPass and volSpikeOk
+
+        pivotPass = g_oscStrength and g_pivotGap and g_classic and g_volPivot and g_volEntry and g_atrRatio and g_regime and g_session and g_flow
+
+        tradable = (tradeMode == "BASELINE_ALL") ? true : pivotPass
+
+        if mode == "TRADE" and tradable and cooldownOk and (not oneTradeAtATime or strategy.position_size == 0)
+            if entryMode == "Raw"
+                longSignal := true
+            else
+                longSetup  := true
+                setupPass  := tradable
+                setupPivot := pl_price
+                setupBar   := bar_index
+                longTrig   := bosHighest
+                totalSetups += 1
+
+                if showZones
+                    if not na(zoneBox)
+                        box.delete(zoneBox)
+                    zH = atr * 1.0
+                    zoneBox := box.new(
+                        left=bar_index,
+                        top=setupPivot + zH,
+                        right=bar_index + maxWaitBars,
+                        bottom=setupPivot - zH,
+                        bgcolor=color.new(color.teal, 88),
+                        border_color=color.new(color.teal, 50)
+                    )
+
+    // update pivot memory always
+    lastPL_price := pl_price
+    lastPL_osc   := pl_osc
+    lastPL_bar   := pl_bar
+
+// Confirm trigger
+if mode == "TRADE" and entryMode == "Confirm(BOS)" and longSetup
+    if (bar_index - setupBar) > maxWaitBars
+        longSetup := false
+        setupPass := false
+        if not na(zoneBox)
+            box.delete(zoneBox)
+            zoneBox := na
+    else
+        buf    = atr * bosAtrBuffer
+        trigOk = useBOSConfirm ? (close > (longTrig + buf)) : (close > open)
+
+        triggerFlowOk    = cvdOk and wv70Ok and volBehaviorPass and volSpikeOk
+        triggerSessionOk = (not useSessionGate) or sessionOk
+
+        finalFlowOk    = (tradeMode == "BASELINE_ALL") ? true : triggerFlowOk
+        finalSessionOk = (tradeMode == "BASELINE_ALL") ? true : triggerSessionOk
+
+        if okBar and warmed and cooldownOk and setupPass and trigOk and finalFlowOk and finalSessionOk and (not oneTradeAtATime or strategy.position_size == 0)
+            longSignal := true
+            longSetup := false
+            setupPass := false
+            if not na(zoneBox)
+                box.delete(zoneBox)
+                zoneBox := na
+
+//═════════════════════════════════════════════════════════════
+// EXECUTION (LONG ONLY) + standardized exits
+//═════════════════════════════════════════════════════════════
+if longSignal
+    strategy.entry("LONG", strategy.long)
+
+entered = (strategy.position_size > 0) and (strategy.position_size[1] == 0)
+if entered
+    lastEntryBar := bar_index
+    totalEntries += 1
+
+var float atrEntry = na
+if entered
+    atrEntry := atr
+if strategy.position_size == 0
+    atrEntry := na
+
+if strategy.position_size > 0 and not na(atrEntry)
+    ep = strategy.position_avg_price
+    sl = ep - (slAtrMult * atrEntry)
+    tp = ep + (slAtrMult * rrMult * atrEntry)
+    strategy.exit("LX", from_entry="LONG", stop=sl, limit=tp)
+
+plotshape(longSignal, "Long", shape.triangleup, location.belowbar, color.new(color.lime, 0), size=size.small)
+
+// Data-window counters
+plot(totalDivergences, "Total Divergences", display=display.data_window)
+plot(totalSetups,      "Total Setups (Confirm)", display=display.data_window)
+plot(totalEntries,     "Total Entries", display=display.data_window)
+plot(useWv70Gate ? bullPctAtPrice : na, "WV Bull% @ price-row", display=display.data_window)
+plot(useCvdGate ? cvd1m : na, "CVD proxy (1m)", display=display.data_window)
