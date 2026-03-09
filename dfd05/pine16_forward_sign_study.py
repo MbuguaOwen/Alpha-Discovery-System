@@ -13,7 +13,7 @@ from .pine16_config import Pine16ExactConfig, load_pine16_exact_config, to_legac
 from .pine16_research import classify_signals, classify_trades, load_truth_datasets
 from .pine16_truth import TruthLabel, TruthMode, normalize_truth_mode
 
-TARGET_HORIZONS_H: Tuple[int, int] = (24, 72)
+DEFAULT_TARGET_HORIZONS_H: Tuple[int, int] = (24, 72)
 TARGET_SYMBOLS = {"XAUUSD", "XAGUSD", "EURUSD"}
 SESSION_SCOPES = ("all_sessions", "london_only", "london_or_newyork")
 
@@ -33,6 +33,49 @@ class ForwardSignArtifacts:
     by_year_session_csv: Path
     by_symbol_year_session_csv: Path
     keep_watch_cut_csv: Path
+
+
+def _normalize_horizons_hours(horizons_hours: Sequence[int] | None) -> Tuple[int, ...]:
+    raw = list(horizons_hours) if horizons_hours is not None else list(DEFAULT_TARGET_HORIZONS_H)
+    vals = sorted({int(h) for h in raw if int(h) > 0})
+    if not vals:
+        vals = list(DEFAULT_TARGET_HORIZONS_H)
+    return tuple(vals)
+
+
+def _horizons_tag(horizons_hours: Sequence[int]) -> str:
+    return "_".join(f"{int(h)}h" for h in horizons_hours)
+
+
+def _empty_master_frame(horizons_hours: Sequence[int]) -> pd.DataFrame:
+    cols: List[str] = [
+        "signal_id",
+        "trade_id",
+        "symbol",
+        "timeframe",
+        "session_scope",
+        "year",
+        "month",
+        "truth_label",
+        "config_pack",
+        "entry_time",
+        "entry_price",
+        "entry_session_bucket",
+        "setup_session_bucket",
+        "entry_in_london_or_newyork",
+    ]
+    for h in horizons_hours:
+        hh = int(h)
+        cols.extend(
+            [
+                f"close_{hh}h",
+                f"forward_return_{hh}h_abs",
+                f"forward_return_{hh}h_pct",
+                f"outcome_{hh}h",
+            ]
+        )
+    cols.extend(["classification_mode", "neutral_band_pct"])
+    return pd.DataFrame(columns=cols)
 
 
 def _md_table(df: pd.DataFrame, cols: Iterable[str]) -> str:
@@ -60,7 +103,7 @@ def _write_html(md: str, path: Path) -> None:
     import html
 
     page = (
-        "<!doctype html><html><head><meta charset='utf-8'><title>Pine16 Forward Sign 24h/72h</title>"
+        "<!doctype html><html><head><meta charset='utf-8'><title>Pine16 Forward Sign Study</title>"
         "<style>body{font-family:ui-monospace,Consolas,monospace;padding:24px;}pre{white-space:pre-wrap;}</style>"
         f"</head><body><pre>{html.escape(md)}</pre></body></html>"
     )
@@ -223,9 +266,15 @@ def _build_master_for_config(
     exact_dir: Path,
     classification_mode: str,
     neutral_band_pct: float,
+    horizons_hours: Sequence[int],
+    timeframe_override: str | None = None,
 ) -> Tuple[pd.DataFrame, Dict[str, object]]:
     cfg = load_pine16_exact_config(config_path)
-    cfg.timeframe = "m30"
+    if timeframe_override is not None and str(timeframe_override).strip():
+        cfg.timeframe = str(timeframe_override).strip().lower()
+    else:
+        cfg.timeframe = str(cfg.timeframe).strip().lower()
+    _ = timeframe_to_minutes(cfg.timeframe)
     cfg.symbols = [s for s in cfg.symbols if str(s) in TARGET_SYMBOLS]
 
     trades, signals, truth_label, parity_metrics, exact_available = load_truth_datasets(cfg, truth_mode, exact_dir)
@@ -244,12 +293,12 @@ def _build_master_for_config(
         "config_path": config_path,
     }
     if tr.empty:
-        return pd.DataFrame(), meta
+        return _empty_master_frame(horizons_hours), meta
 
     legacy_cfg = to_legacy_run_config(cfg)
     tf_minutes = timeframe_to_minutes(cfg.timeframe)
     session_scope = _config_session_scope(cfg)
-    horizons = sorted(set(int(h) for h in TARGET_HORIZONS_H))
+    horizons = sorted({int(h) for h in horizons_hours})
     rows: List[Dict[str, object]] = []
 
     for symbol in sorted(tr["symbol"].astype(str).unique().tolist()):
@@ -318,17 +367,17 @@ def _build_master_for_config(
 
     master = pd.DataFrame(rows)
     if master.empty:
-        return master, meta
+        return _empty_master_frame(horizons_hours), meta
     for c in ["year", "month"]:
         master[c] = pd.to_numeric(master[c], errors="coerce").astype("Int64")
     return master, meta
 
 
-def _stack_horizons(expanded: pd.DataFrame) -> pd.DataFrame:
+def _stack_horizons(expanded: pd.DataFrame, horizons_hours: Sequence[int]) -> pd.DataFrame:
     if expanded.empty:
         return pd.DataFrame()
     parts: List[pd.DataFrame] = []
-    for h in TARGET_HORIZONS_H:
+    for h in horizons_hours:
         ret_col = f"forward_return_{int(h)}h_pct"
         abs_col = f"forward_return_{int(h)}h_abs"
         close_col = f"close_{int(h)}h"
@@ -365,35 +414,43 @@ def _stack_horizons(expanded: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True, sort=False)
 
 
-def _keep_watch_cut(by_symbol_session: pd.DataFrame, min_n: int, block_truth: str) -> pd.DataFrame:
+def _keep_watch_cut(
+    by_symbol_session: pd.DataFrame,
+    min_n: int,
+    block_truth: str,
+    horizons_hours: Sequence[int],
+) -> pd.DataFrame:
     if by_symbol_session.empty:
         return pd.DataFrame()
     work = by_symbol_session.rename(columns={"analysis_session_scope": "session_scope"}).copy()
+    horizons = [int(h) for h in horizons_hours]
+    h1 = int(horizons[0]) if horizons else 24
+    h2 = int(horizons[1]) if len(horizons) >= 2 else h1
     rows = []
     for (symbol, session_scope), g in work.groupby(["symbol", "session_scope"], dropna=False, sort=True):
-        r24 = g[g["horizon_h"] == 24].head(1)
-        r72 = g[g["horizon_h"] == 72].head(1)
-        n24 = int(pd.to_numeric(r24["n_signals"], errors="coerce").iloc[0]) if not r24.empty else 0
-        n72 = int(pd.to_numeric(r72["n_signals"], errors="coerce").iloc[0]) if not r72.empty else 0
-        w24 = float(pd.to_numeric(r24["win_rate"], errors="coerce").iloc[0]) if not r24.empty else np.nan
-        w72 = float(pd.to_numeric(r72["win_rate"], errors="coerce").iloc[0]) if not r72.empty else np.nan
-        m24 = float(pd.to_numeric(r24["mean_forward_return_pct"], errors="coerce").iloc[0]) if not r24.empty else np.nan
-        m72 = float(pd.to_numeric(r72["mean_forward_return_pct"], errors="coerce").iloc[0]) if not r72.empty else np.nan
-        med24 = float(pd.to_numeric(r24["median_forward_return_pct"], errors="coerce").iloc[0]) if not r24.empty else np.nan
-        med72 = float(pd.to_numeric(r72["median_forward_return_pct"], errors="coerce").iloc[0]) if not r72.empty else np.nan
-        n_ok = max(n24, n72) >= int(min_n)
+        r1 = g[g["horizon_h"] == h1].head(1)
+        r2 = g[g["horizon_h"] == h2].head(1)
+        n1 = int(pd.to_numeric(r1["n_signals"], errors="coerce").iloc[0]) if not r1.empty else 0
+        n2 = int(pd.to_numeric(r2["n_signals"], errors="coerce").iloc[0]) if not r2.empty else 0
+        w1 = float(pd.to_numeric(r1["win_rate"], errors="coerce").iloc[0]) if not r1.empty else np.nan
+        w2 = float(pd.to_numeric(r2["win_rate"], errors="coerce").iloc[0]) if not r2.empty else np.nan
+        m1 = float(pd.to_numeric(r1["mean_forward_return_pct"], errors="coerce").iloc[0]) if not r1.empty else np.nan
+        m2 = float(pd.to_numeric(r2["mean_forward_return_pct"], errors="coerce").iloc[0]) if not r2.empty else np.nan
+        med1 = float(pd.to_numeric(r1["median_forward_return_pct"], errors="coerce").iloc[0]) if not r1.empty else np.nan
+        med2 = float(pd.to_numeric(r2["median_forward_return_pct"], errors="coerce").iloc[0]) if not r2.empty else np.nan
+        n_ok = max(n1, n2) >= int(min_n)
 
         action = "WATCH"
         rationale = "mixed or borderline directional profile"
         keep_cond = n_ok and (
-            (np.isfinite(w24) and w24 > 0.52 and np.isfinite(m24) and m24 > 0 and np.isfinite(med24) and med24 >= 0)
-            or (np.isfinite(w72) and w72 > 0.52 and np.isfinite(m72) and m72 > 0 and np.isfinite(med72) and med72 >= 0)
+            (np.isfinite(w1) and w1 > 0.52 and np.isfinite(m1) and m1 > 0 and np.isfinite(med1) and med1 >= 0)
+            or (np.isfinite(w2) and w2 > 0.52 and np.isfinite(m2) and m2 > 0 and np.isfinite(med2) and med2 >= 0)
         )
         cut_cond = n_ok and (
-            (not np.isfinite(w24) or w24 < 0.50)
-            and (not np.isfinite(w72) or w72 < 0.50)
-            and (not np.isfinite(m24) or m24 <= 0)
-            and (not np.isfinite(m72) or m72 <= 0)
+            (not np.isfinite(w1) or w1 < 0.50)
+            and (not np.isfinite(w2) or w2 < 0.50)
+            and (not np.isfinite(m1) or m1 <= 0)
+            and (not np.isfinite(m2) or m2 <= 0)
         )
         if keep_cond:
             action = "KEEP"
@@ -406,14 +463,14 @@ def _keep_watch_cut(by_symbol_session: pd.DataFrame, min_n: int, block_truth: st
             {
                 "symbol": str(symbol),
                 "session_scope": str(session_scope),
-                "n_24h": n24,
-                "n_72h": n72,
-                "win_rate_24h": w24,
-                "win_rate_72h": w72,
-                "mean_return_24h": m24,
-                "mean_return_72h": m72,
-                "median_return_24h": med24,
-                "median_return_72h": med72,
+                f"n_{h1}h": n1,
+                f"n_{h2}h": n2,
+                f"win_rate_{h1}h": w1,
+                f"win_rate_{h2}h": w2,
+                f"mean_return_{h1}h": m1,
+                f"mean_return_{h2}h": m2,
+                f"median_return_{h1}h": med1,
+                f"median_return_{h2}h": med2,
                 "action": action,
                 "rationale": rationale,
                 "truth_label_block": block_truth,
@@ -440,6 +497,8 @@ def _render_report(
     block_truth: str,
     mode: str,
     neutral_band_pct: float,
+    timeframe_label: str,
+    horizons_hours: Sequence[int],
     overall: pd.DataFrame,
     by_symbol: pd.DataFrame,
     by_session: pd.DataFrame,
@@ -450,17 +509,20 @@ def _render_report(
     keep_watch_cut: pd.DataFrame,
     min_n: int,
 ) -> str:
-    o24 = overall[overall["horizon_h"] == 24].head(1)
-    o72 = overall[overall["horizon_h"] == 72].head(1)
-    wr24 = float(pd.to_numeric(o24["win_rate"], errors="coerce").iloc[0]) if not o24.empty else np.nan
-    wr72 = float(pd.to_numeric(o72["win_rate"], errors="coerce").iloc[0]) if not o72.empty else np.nan
+    horizons = [int(h) for h in horizons_hours]
+    h1 = int(horizons[0]) if horizons else 24
+    h2 = int(horizons[1]) if len(horizons) >= 2 else h1
+    o1 = overall[overall["horizon_h"] == h1].head(1)
+    o2 = overall[overall["horizon_h"] == h2].head(1)
+    wr1 = float(pd.to_numeric(o1["win_rate"], errors="coerce").iloc[0]) if not o1.empty else np.nan
+    wr2 = float(pd.to_numeric(o2["win_rate"], errors="coerce").iloc[0]) if not o2.empty else np.nan
     best_symbol = _pick_best(by_symbol, ["symbol"], min_n=min_n)
     best_session = _pick_best(by_session, ["analysis_session_scope"], min_n=min_n)
 
-    london72 = by_session[(by_session["analysis_session_scope"] == "london_only") & (by_session["horizon_h"] == 72)]
-    lonny72 = by_session[(by_session["analysis_session_scope"] == "london_or_newyork") & (by_session["horizon_h"] == 72)]
-    wl72 = float(pd.to_numeric(london72["win_rate"], errors="coerce").iloc[0]) if not london72.empty else np.nan
-    wln72 = float(pd.to_numeric(lonny72["win_rate"], errors="coerce").iloc[0]) if not lonny72.empty else np.nan
+    london_h2 = by_session[(by_session["analysis_session_scope"] == "london_only") & (by_session["horizon_h"] == h2)]
+    lonny_h2 = by_session[(by_session["analysis_session_scope"] == "london_or_newyork") & (by_session["horizon_h"] == h2)]
+    wl_h2 = float(pd.to_numeric(london_h2["win_rate"], errors="coerce").iloc[0]) if not london_h2.empty else np.nan
+    wln_h2 = float(pd.to_numeric(lonny_h2["win_rate"], errors="coerce").iloc[0]) if not lonny_h2.empty else np.nan
 
     def _best_wr(symbol: str) -> float:
         d = by_symbol[by_symbol["symbol"] == symbol].copy()
@@ -474,35 +536,35 @@ def _render_report(
     xau_best = _best_wr("XAUUSD")
     xag_best = _best_wr("XAGUSD")
     eur_best = _best_wr("EURUSD")
-    directional_exists = bool((np.isfinite(wr24) and wr24 > 0.50) or (np.isfinite(wr72) and wr72 > 0.50))
+    directional_exists = bool((np.isfinite(wr1) and wr1 > 0.50) or (np.isfinite(wr2) and wr2 > 0.50))
 
     lines = [
-        "# Pine16 Forward Sign Study (24h/72h)",
+        f"# Pine16 Forward Sign Study ({h1}h/{h2}h)",
         "",
         "## 1. Executive verdict",
         f"- truth_label_block: `{block_truth}`",
         f"- directional_edge_exists: `{directional_exists}`",
-        f"- overall_win_rate_24h: `{wr24:.6f}`" if np.isfinite(wr24) else "- overall_win_rate_24h: `nan`",
-        f"- overall_win_rate_72h: `{wr72:.6f}`" if np.isfinite(wr72) else "- overall_win_rate_72h: `nan`",
+        f"- overall_win_rate_{h1}h: `{wr1:.6f}`" if np.isfinite(wr1) else f"- overall_win_rate_{h1}h: `nan`",
+        f"- overall_win_rate_{h2}h: `{wr2:.6f}`" if np.isfinite(wr2) else f"- overall_win_rate_{h2}h: `nan`",
         "",
         "## 2. Truth source used",
         f"- truth_label_block: `{block_truth}`",
         "- allowed_truth_labels: `EXACT_PINE_EXPORTED | VERIFIED_PYTHON_PARITY | UNVERIFIED_PYTHON_APPROXIMATION`",
         "",
         "## 3. Study definition",
-        "- timeframe: `m30`",
-        "- horizons: `24h,72h`",
+        f"- timeframe: `{timeframe_label}`",
+        f"- horizons: `{h1}h,{h2}h`",
         "- no stop/target economics",
         f"- outcome_mode: `{mode}`",
         f"- neutral_band_pct: `{neutral_band_pct:.6f}`",
         "",
-        "## 4. 24h overall results",
+        f"## 4. {h1}h overall results",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(overall[overall["horizon_h"] == 24], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
+        _md_table(overall[overall["horizon_h"] == h1], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
         "",
-        "## 5. 72h overall results",
+        f"## 5. {h2}h overall results",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(overall[overall["horizon_h"] == 72], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
+        _md_table(overall[overall["horizon_h"] == h2], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
         "",
         "## 6. By symbol",
         f"- truth_label_block: `{block_truth}`",
@@ -524,22 +586,36 @@ def _render_report(
         f"- truth_label_block: `{block_truth}`",
         _md_table(by_symbol_session, ["symbol", "analysis_session_scope", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "median_forward_return_pct"]),
         "",
-        "## 11. 24h vs 72h comparison",
+        f"## 11. {h1}h vs {h2}h comparison",
         f"- truth_label_block: `{block_truth}`",
-        f"- overall_win_rate_delta_72h_minus_24h: `{(wr72 - wr24):.6f}`" if np.isfinite(wr24) and np.isfinite(wr72) else "- overall_win_rate_delta_72h_minus_24h: `nan`",
-        f"- directional_improves_72h_vs_24h: `{bool(np.isfinite(wr24) and np.isfinite(wr72) and wr72 > wr24)}`",
+        f"- overall_win_rate_delta_{h2}h_minus_{h1}h: `{(wr2 - wr1):.6f}`" if np.isfinite(wr1) and np.isfinite(wr2) else f"- overall_win_rate_delta_{h2}h_minus_{h1}h: `nan`",
+        f"- directional_improves_{h2}h_vs_{h1}h: `{bool(np.isfinite(wr1) and np.isfinite(wr2) and wr2 > wr1)}`",
         "",
         "## 12. Keep / watch / cut",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(keep_watch_cut, ["symbol", "session_scope", "n_24h", "n_72h", "win_rate_24h", "win_rate_72h", "mean_return_24h", "mean_return_72h", "action", "rationale"]),
+        _md_table(
+            keep_watch_cut,
+            [
+                "symbol",
+                "session_scope",
+                f"n_{h1}h",
+                f"n_{h2}h",
+                f"win_rate_{h1}h",
+                f"win_rate_{h2}h",
+                f"mean_return_{h1}h",
+                f"mean_return_{h2}h",
+                "action",
+                "rationale",
+            ],
+        ),
         "",
         "## 13. Final answer: is there directional edge?",
         f"- truth_label_block: `{block_truth}`",
         f"- directional_edge_exists_over_4y: `{directional_exists}`",
         "",
         "## Final Questions",
-        f"1. At 24h, is price above entry more than 50% of the time? `{bool(np.isfinite(wr24) and wr24 > 0.50)}`",
-        f"2. At 72h, is price above entry more than 50% of the time? `{bool(np.isfinite(wr72) and wr72 > 0.50)}`",
+        f"1. At {h1}h, is price above entry more than 50% of the time? `{bool(np.isfinite(wr1) and wr1 > 0.50)}`",
+        f"2. At {h2}h, is price above entry more than 50% of the time? `{bool(np.isfinite(wr2) and wr2 > 0.50)}`",
         (
             f"3. Which symbol is strongest? `{best_symbol.iloc[0]['symbol']}` @ `{int(best_symbol.iloc[0]['horizon_h'])}h` (win_rate={float(best_symbol.iloc[0]['win_rate']):.6f}, n={int(best_symbol.iloc[0]['n_signals'])})"
             if not best_symbol.empty
@@ -551,8 +627,8 @@ def _render_report(
             else "4. Which session is strongest? `unknown`"
         ),
         (
-            f"5. Is London-only better than London+NY? `{bool(np.isfinite(wl72) and np.isfinite(wln72) and wl72 > wln72)}` (72h london={wl72:.6f}, london_or_newyork={wln72:.6f})"
-            if np.isfinite(wl72) and np.isfinite(wln72)
+            f"5. Is London-only better than London+NY? `{bool(np.isfinite(wl_h2) and np.isfinite(wln_h2) and wl_h2 > wln_h2)}` ({h2}h london={wl_h2:.6f}, london_or_newyork={wln_h2:.6f})"
+            if np.isfinite(wl_h2) and np.isfinite(wln_h2)
             else "5. Is London-only better than London+NY? `unknown`"
         ),
         f"6. Does XAUUSD have directional edge? `{bool(np.isfinite(xau_best) and xau_best > 0.50)}`",
@@ -584,6 +660,8 @@ def run_forward_sign_study(
     master_path: Path,
     classification_mode: str = "strict_zero",
     neutral_band_pct: float = 0.0,
+    horizons_hours: Sequence[int] | None = None,
+    timeframe_override: str | None = None,
     min_n: int = 20,
     export_html: bool = True,
     audit_path: Path = Path("outputs/audit_pine16_forward_sign_24h_72h.md"),
@@ -594,6 +672,7 @@ def run_forward_sign_study(
     mode = (classification_mode or "strict_zero").strip().lower()
     if mode not in {"strict_zero", "neutral_band"}:
         raise SystemExit("classification_mode must be strict_zero or neutral_band")
+    horizons = _normalize_horizons_hours(horizons_hours)
 
     parts: List[pd.DataFrame] = []
     metas: List[Dict[str, object]] = []
@@ -603,7 +682,15 @@ def run_forward_sign_study(
         cp_band = float(overrides.get("neutral_band_pct", neutral_band_pct))
         if cp_mode not in {"strict_zero", "neutral_band"}:
             cp_mode = mode
-        m, meta = _build_master_for_config(cp, truth_mode, exact_dir, cp_mode, cp_band)
+        m, meta = _build_master_for_config(
+            cp,
+            truth_mode,
+            exact_dir,
+            cp_mode,
+            cp_band,
+            horizons,
+            timeframe_override=timeframe_override,
+        )
         if not m.empty:
             m["classification_mode"] = cp_mode
             m["neutral_band_pct"] = float(cp_band)
@@ -612,6 +699,8 @@ def run_forward_sign_study(
 
     master = pd.concat(parts, ignore_index=True, sort=False) if parts else pd.DataFrame()
     block_truth = _truth_label_block(master["truth_label"].astype(str).tolist()) if not master.empty else _truth_label_block([m.get("truth_label", "") for m in metas])
+    if master.empty and len(master.columns) == 0:
+        master = _empty_master_frame(horizons)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     master_path.parent.mkdir(parents=True, exist_ok=True)
@@ -631,12 +720,18 @@ def run_forward_sign_study(
         master = master.drop_duplicates(subset=["_dedup_key"], keep="first").drop(columns=["_dedup_key"])
     master.to_parquet(master_path, index=False)
 
+    if not master.empty and "timeframe" in master.columns:
+        tf_vals = sorted({str(v) for v in master["timeframe"].dropna().astype(str).tolist() if str(v).strip()})
+        timeframe_label = ",".join(tf_vals) if tf_vals else (str(timeframe_override).strip().lower() if timeframe_override else "unknown")
+    else:
+        timeframe_label = str(timeframe_override).strip().lower() if timeframe_override else "unknown"
+
     base = master.copy()
     if not base.empty:
         base["analysis_session_scope"] = "all_sessions"
     expanded = _expand_scopes(master)
-    base_long = _stack_horizons(base)
-    scoped_long = _stack_horizons(expanded)
+    base_long = _stack_horizons(base, horizons)
+    scoped_long = _stack_horizons(expanded, horizons)
 
     overall = _aggregate(base_long, ["horizon_h"], block_truth)
     by_symbol = _aggregate(base_long, ["symbol", "horizon_h"], block_truth)
@@ -646,20 +741,22 @@ def run_forward_sign_study(
     by_symbol_session = _aggregate(scoped_long, ["symbol", "analysis_session_scope", "horizon_h"], block_truth)
     by_year_session = _aggregate(scoped_long, ["year", "analysis_session_scope", "horizon_h"], block_truth)
     by_symbol_year_session = _aggregate(scoped_long, ["symbol", "year", "analysis_session_scope", "horizon_h"], block_truth)
-    keep_watch_cut = _keep_watch_cut(by_symbol_session, min_n=min_n, block_truth=block_truth)
+    keep_watch_cut = _keep_watch_cut(by_symbol_session, min_n=min_n, block_truth=block_truth, horizons_hours=horizons)
+
+    stem = f"pine16_forward_sign_{_horizons_tag(horizons)}"
 
     paths = {
-        "report_md": output_dir / "pine16_forward_sign_24h_72h_report.md",
-        "report_html": output_dir / "pine16_forward_sign_24h_72h_report.html",
-        "overall": output_dir / "pine16_forward_sign_24h_72h_overall.csv",
-        "by_symbol": output_dir / "pine16_forward_sign_24h_72h_by_symbol.csv",
-        "by_session": output_dir / "pine16_forward_sign_24h_72h_by_session.csv",
-        "by_year": output_dir / "pine16_forward_sign_24h_72h_by_year.csv",
-        "by_symbol_year": output_dir / "pine16_forward_sign_24h_72h_by_symbol_year.csv",
-        "by_symbol_session": output_dir / "pine16_forward_sign_24h_72h_by_symbol_session.csv",
-        "by_year_session": output_dir / "pine16_forward_sign_24h_72h_by_year_session.csv",
-        "by_symbol_year_session": output_dir / "pine16_forward_sign_24h_72h_by_symbol_year_session.csv",
-        "keep_watch_cut": output_dir / "pine16_forward_sign_24h_72h_keep_watch_cut.csv",
+        "report_md": output_dir / f"{stem}_report.md",
+        "report_html": output_dir / f"{stem}_report.html",
+        "overall": output_dir / f"{stem}_overall.csv",
+        "by_symbol": output_dir / f"{stem}_by_symbol.csv",
+        "by_session": output_dir / f"{stem}_by_session.csv",
+        "by_year": output_dir / f"{stem}_by_year.csv",
+        "by_symbol_year": output_dir / f"{stem}_by_symbol_year.csv",
+        "by_symbol_session": output_dir / f"{stem}_by_symbol_session.csv",
+        "by_year_session": output_dir / f"{stem}_by_year_session.csv",
+        "by_symbol_year_session": output_dir / f"{stem}_by_symbol_year_session.csv",
+        "keep_watch_cut": output_dir / f"{stem}_keep_watch_cut.csv",
     }
 
     overall.to_csv(paths["overall"], index=False)
@@ -676,6 +773,8 @@ def run_forward_sign_study(
         block_truth=block_truth,
         mode=mode,
         neutral_band_pct=neutral_band_pct,
+        timeframe_label=timeframe_label,
+        horizons_hours=horizons,
         overall=overall,
         by_symbol=by_symbol,
         by_session=by_session,
@@ -710,7 +809,7 @@ def run_forward_sign_study(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description="Pine16 24h/72h forward sign study")
+    ap = argparse.ArgumentParser(description="Pine16 forward sign study for configurable horizons.")
     ap.add_argument("--config", action="append", required=True, help="Config path; pass multiple times to combine runs.")
     ap.add_argument("--truth-mode", default=TruthMode.VERIFIED_PYTHON_PARITY.value, choices=[m.value for m in TruthMode], help="Truth mode.")
     ap.add_argument("--exact-dir", default="data/derived/pine16_exact", help="Exact/parity cache directory.")
@@ -718,6 +817,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--master-path", default="data/derived/pine16_exact/forward_sign_24h_72h_master.parquet", help="Master parquet output path.")
     ap.add_argument("--classification-mode", default="strict_zero", choices=["strict_zero", "neutral_band"], help="Outcome mode.")
     ap.add_argument("--neutral-band-pct", type=float, default=0.0, help="Neutral band in percent.")
+    ap.add_argument("--horizons-hours", nargs="+", type=int, default=None, help="Forward horizons in hours, e.g. 24 168.")
+    ap.add_argument("--timeframe", default=None, help="Optional timeframe override (e.g., m15, m30).")
     ap.add_argument("--min-n", type=int, default=20, help="Minimum n for keep/watch/cut.")
     ap.add_argument("--export-html", action="store_true", help="Write html report.")
     ap.add_argument("--audit-path", default="outputs/audit_pine16_forward_sign_24h_72h.md", help="Audit markdown path.")
@@ -734,6 +835,8 @@ def main() -> None:
         master_path=Path(args.master_path),
         classification_mode=str(args.classification_mode),
         neutral_band_pct=float(args.neutral_band_pct),
+        horizons_hours=args.horizons_hours,
+        timeframe_override=(str(args.timeframe).strip().lower() if args.timeframe else None),
         min_n=int(args.min_n),
         export_html=bool(args.export_html),
         audit_path=Path(args.audit_path),
