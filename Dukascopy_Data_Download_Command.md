@@ -67,3 +67,29 @@ python -m scripts.restore_dukascopy_bars `
 Import-Csv data/derived/dukascopy/restore_logs/restore_summary.csv |
 Sort-Object symbol |
 Select-Object symbol,ok_days,not_found_days,error_days,bars_m1,unexpected_gaps_after_fill
+
+# 9) Run watchlist forward-sign study with 24h + 1 week (168h) + 2 weeks (336h)
+# Method used for London+NY validation: run all sessions, then read analysis_session_scope=london_or_newyork
+python -m scripts.pine16_forward_sign_study `
+  --config configs/pine16_forwardsign_m30_watchlist_all_sessions.yaml `
+  --truth-mode verified_python_parity `
+  --timeframe m15 `
+  --horizons-hours 24 168 336 `
+  --output-dir outputs/reports_watchlist_m15_allsessions_24h_168h_336h `
+  --master-path data/derived/pine16_exact/forward_sign_24h_168h_336h_master_watchlist_m15_allsessions.parquet `
+  --export-html
+
+python -m scripts.pine16_forward_sign_study `
+  --config configs/pine16_forwardsign_m30_watchlist_all_sessions.yaml `
+  --truth-mode verified_python_parity `
+  --timeframe m30 `
+  --horizons-hours 24 168 336 `
+  --output-dir outputs/reports_watchlist_m30_allsessions_24h_168h_336h `
+  --master-path data/derived/pine16_exact/forward_sign_24h_168h_336h_master_watchlist_m30_allsessions.parquet `
+  --export-html
+
+# 10) Build London+NY validation tables and execution matrix from those runs
+python -m scripts.pine16_watchlist_london_ny_validation `
+  --m15-dir outputs/reports_watchlist_m15_allsessions_24h_168h_336h `
+  --m30-dir outputs/reports_watchlist_m30_allsessions_24h_168h_336h `
+  --output-dir outputs/reports

@@ -1,0 +1,291 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Pine16 Forward Sign Study</title><style>body{font-family:ui-monospace,Consolas,monospace;padding:24px;}pre{white-space:pre-wrap;}</style></head><body><pre># Pine16 Forward Sign Study (24h/168h)
+
+## 1. Executive verdict
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+- directional_edge_exists: `True`
+- overall_win_rate_24h: `0.486210`
+- overall_win_rate_168h: `0.558544`
+
+## 2. Truth source used
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+- allowed_truth_labels: `EXACT_PINE_EXPORTED | VERIFIED_PYTHON_PARITY | UNVERIFIED_PYTHON_APPROXIMATION`
+
+## 3. Study definition
+- timeframe: `m15`
+- horizons: `24h,168h`
+- no stop/target economics
+- outcome_mode: `strict_zero`
+- neutral_band_pct: `0.000000`
+
+## 4. 24h overall results
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| horizon_h | n_signals | win_rate | loss_rate | flat_rate | mean_forward_return_pct | median_forward_return_pct | win_rate_ci95_low | win_rate_ci95_high | win_rate_band |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 24 | 1269 | 0.486210 | 0.510638 | 0.003152 | -0.099430 | -0.018677 | 0.458793 | 0.513710 | no directional edge |
+
+## 5. 168h overall results
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| horizon_h | n_signals | win_rate | loss_rate | flat_rate | mean_forward_return_pct | median_forward_return_pct | win_rate_ci95_low | win_rate_ci95_high | win_rate_band |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 168 | 1264 | 0.558544 | 0.440665 | 0.000791 | 0.118931 | 0.303645 | 0.531033 | 0.585701 | strong directional edge |
+
+## 6. By symbol
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| symbol | horizon_h | n_signals | win_rate | mean_forward_return_pct | median_forward_return_pct | win_rate_band |
+| --- | --- | --- | --- | --- | --- | --- |
+| BRENTCMDUSD | 24 | 297 | 0.454545 | -0.255995 | -0.151091 | no directional edge |
+| BRENTCMDUSD | 168 | 297 | 0.525253 | 0.045696 | 0.288226 | usable |
+| BRENTCMDUSD | 336 | 296 | 0.564189 | 0.229145 | 0.404702 | strong directional edge |
+| EURJPY | 24 | 152 | 0.427632 | -0.089906 | -0.081388 | no directional edge |
+| EURJPY | 168 | 149 | 0.557047 | 0.035510 | 0.196443 | strong directional edge |
+| EURJPY | 336 | 148 | 0.608108 | 0.205806 | 0.268293 | strong directional edge |
+| GBPJPY | 24 | 145 | 0.537931 | -0.014466 | 0.035892 | usable |
+| GBPJPY | 168 | 145 | 0.544828 | -0.074587 | 0.092251 | usable |
+| GBPJPY | 336 | 145 | 0.565517 | 0.047523 | 0.191369 | strong directional edge |
+| LIGHTCMDUSD | 24 | 202 | 0.470297 | -0.169120 | -0.104234 | no directional edge |
+| LIGHTCMDUSD | 168 | 202 | 0.524752 | -0.135048 | 0.246992 | usable |
+| LIGHTCMDUSD | 336 | 202 | 0.504950 | -0.251962 | 0.114776 | borderline |
+| USDJPY | 24 | 148 | 0.445946 | -0.091851 | -0.070771 | no directional edge |
+| USDJPY | 168 | 147 | 0.639456 | 0.212631 | 0.376432 | strong directional edge |
+| USDJPY | 336 | 146 | 0.630137 | 0.362570 | 0.678410 | strong directional edge |
+| XAGUSD | 24 | 178 | 0.516854 | -0.035689 | 0.072702 | borderline |
+| XAGUSD | 168 | 178 | 0.573034 | 0.457028 | 0.825750 | strong directional edge |
+| XAGUSD | 336 | 178 | 0.516854 | 0.801077 | 0.444192 | borderline |
+| XAUUSD | 24 | 147 | 0.585034 | 0.134188 | 0.116392 | strong directional edge |
+| XAUUSD | 168 | 146 | 0.589041 | 0.390090 | 0.393937 | strong directional edge |
+| XAUUSD | 336 | 146 | 0.589041 | 0.768994 | 0.426212 | strong directional edge |
+
+## 7. By session
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| analysis_session_scope | horizon_h | n_signals | win_rate | mean_forward_return_pct | median_forward_return_pct | win_rate_band |
+| --- | --- | --- | --- | --- | --- | --- |
+| all_sessions | 24 | 1269 | 0.486210 | -0.099430 | -0.018677 | no directional edge |
+| all_sessions | 168 | 1264 | 0.558544 | 0.118931 | 0.303645 | strong directional edge |
+| all_sessions | 336 | 1261 | 0.563838 | 0.287138 | 0.398063 | strong directional edge |
+| london_only | 24 | 268 | 0.466418 | -0.095292 | -0.088562 | no directional edge |
+| london_only | 168 | 266 | 0.541353 | 0.190042 | 0.309541 | usable |
+| london_only | 336 | 264 | 0.534091 | 0.460781 | 0.219770 | usable |
+| london_or_newyork | 24 | 456 | 0.475877 | -0.095462 | -0.052112 | no directional edge |
+| london_or_newyork | 168 | 454 | 0.537445 | -0.017167 | 0.200236 | usable |
+| london_or_newyork | 336 | 452 | 0.524336 | 0.118499 | 0.165829 | usable |
+
+## 8. By year
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| year | horizon_h | n_signals | win_rate | mean_forward_return_pct | median_forward_return_pct |
+| --- | --- | --- | --- | --- | --- |
+| 2022.000000 | 24.000000 | 322.000000 | 0.500000 | -0.033134 | 0.007129 |
+| 2022.000000 | 168.000000 | 322.000000 | 0.534161 | 0.191327 | 0.190735 |
+| 2022.000000 | 336.000000 | 322.000000 | 0.524845 | 0.267025 | 0.196079 |
+| 2023.000000 | 24.000000 | 351.000000 | 0.467236 | -0.189136 | -0.036110 |
+| 2023.000000 | 168.000000 | 351.000000 | 0.535613 | -0.119205 | 0.210680 |
+| 2023.000000 | 336.000000 | 351.000000 | 0.541311 | 0.132365 | 0.166032 |
+| 2024.000000 | 24.000000 | 286.000000 | 0.506993 | -0.087766 | 0.011120 |
+| 2024.000000 | 168.000000 | 286.000000 | 0.611888 | 0.221603 | 0.467220 |
+| 2024.000000 | 336.000000 | 286.000000 | 0.594406 | 0.269011 | 0.508436 |
+| 2025.000000 | 24.000000 | 310.000000 | 0.474194 | -0.077484 | -0.059454 |
+| 2025.000000 | 168.000000 | 305.000000 | 0.560656 | 0.220275 | 0.397536 |
+| 2025.000000 | 336.000000 | 302.000000 | 0.602649 | 0.505634 | 0.444221 |
+
+## 9. By symbol x year
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| symbol | year | horizon_h | n_signals | win_rate | mean_forward_return_pct |
+| --- | --- | --- | --- | --- | --- |
+| BRENTCMDUSD | 2022 | 24 | 75 | 0.453333 | -0.411343 |
+| BRENTCMDUSD | 2022 | 168 | 75 | 0.506667 | 0.758855 |
+| BRENTCMDUSD | 2022 | 336 | 75 | 0.560000 | 0.741903 |
+| BRENTCMDUSD | 2023 | 24 | 89 | 0.516854 | -0.235387 |
+| BRENTCMDUSD | 2023 | 168 | 89 | 0.516854 | -0.361705 |
+| BRENTCMDUSD | 2023 | 336 | 89 | 0.550562 | 0.392331 |
+| BRENTCMDUSD | 2024 | 24 | 67 | 0.358209 | -0.339931 |
+| BRENTCMDUSD | 2024 | 168 | 67 | 0.626866 | 0.206382 |
+| BRENTCMDUSD | 2024 | 336 | 67 | 0.597015 | -0.137331 |
+| BRENTCMDUSD | 2025 | 24 | 66 | 0.469697 | -0.022045 |
+| BRENTCMDUSD | 2025 | 168 | 66 | 0.454545 | -0.378458 |
+| BRENTCMDUSD | 2025 | 336 | 65 | 0.553846 | -0.208187 |
+| EURJPY | 2022 | 24 | 41 | 0.536585 | -0.037024 |
+| EURJPY | 2022 | 168 | 41 | 0.512195 | -0.191147 |
+| EURJPY | 2022 | 336 | 41 | 0.536585 | 0.460112 |
+| EURJPY | 2023 | 24 | 39 | 0.307692 | -0.220960 |
+| EURJPY | 2023 | 168 | 39 | 0.564103 | 0.013418 |
+| EURJPY | 2023 | 336 | 39 | 0.589744 | 0.014903 |
+| EURJPY | 2024 | 24 | 29 | 0.448276 | -0.122489 |
+| EURJPY | 2024 | 168 | 29 | 0.517241 | 0.008047 |
+| EURJPY | 2024 | 336 | 29 | 0.551724 | -0.190345 |
+| EURJPY | 2025 | 24 | 43 | 0.418605 | 0.000507 |
+| EURJPY | 2025 | 168 | 40 | 0.625000 | 0.309283 |
+| EURJPY | 2025 | 336 | 39 | 0.743590 | 0.423935 |
+| GBPJPY | 2022 | 24 | 31 | 0.419355 | -0.107545 |
+| GBPJPY | 2022 | 168 | 31 | 0.419355 | -0.510385 |
+| GBPJPY | 2022 | 336 | 31 | 0.451613 | -0.178117 |
+| GBPJPY | 2023 | 24 | 30 | 0.600000 | 0.097613 |
+| GBPJPY | 2023 | 168 | 30 | 0.666667 | 0.350898 |
+| GBPJPY | 2023 | 336 | 30 | 0.633333 | 0.468105 |
+| GBPJPY | 2024 | 24 | 35 | 0.600000 | -0.003612 |
+| GBPJPY | 2024 | 168 | 35 | 0.571429 | -0.398997 |
+| GBPJPY | 2024 | 336 | 35 | 0.457143 | -0.701010 |
+| GBPJPY | 2025 | 24 | 49 | 0.530612 | -0.031950 |
+| GBPJPY | 2025 | 168 | 49 | 0.530612 | 0.172341 |
+| GBPJPY | 2025 | 336 | 49 | 0.673469 | 0.467442 |
+| LIGHTCMDUSD | 2022 | 24 | 38 | 0.605263 | 0.310222 |
+| LIGHTCMDUSD | 2022 | 168 | 38 | 0.500000 | -0.287578 |
+| LIGHTCMDUSD | 2022 | 336 | 38 | 0.578947 | -0.404317 |
+| LIGHTCMDUSD | 2023 | 24 | 57 | 0.508772 | -0.193724 |
+| LIGHTCMDUSD | 2023 | 168 | 57 | 0.543860 | -0.153070 |
+| LIGHTCMDUSD | 2023 | 336 | 57 | 0.456140 | -0.450034 |
+| LIGHTCMDUSD | 2024 | 24 | 52 | 0.403846 | -0.401613 |
+| LIGHTCMDUSD | 2024 | 168 | 52 | 0.615385 | 0.488595 |
+| LIGHTCMDUSD | 2024 | 336 | 52 | 0.557692 | 0.099953 |
+| LIGHTCMDUSD | 2025 | 24 | 55 | 0.400000 | -0.254991 |
+| LIGHTCMDUSD | 2025 | 168 | 55 | 0.436364 | -0.600611 |
+| LIGHTCMDUSD | 2025 | 336 | 55 | 0.454545 | -0.274144 |
+| USDJPY | 2022 | 24 | 31 | 0.387097 | -0.174667 |
+| USDJPY | 2022 | 168 | 31 | 0.612903 | 0.001231 |
+| USDJPY | 2022 | 336 | 31 | 0.516129 | -0.204723 |
+| USDJPY | 2023 | 24 | 42 | 0.333333 | -0.186908 |
+| USDJPY | 2023 | 168 | 42 | 0.642857 | 0.366335 |
+| USDJPY | 2023 | 336 | 42 | 0.761905 | 0.804296 |
+| USDJPY | 2024 | 24 | 30 | 0.566667 | 0.032631 |
+| USDJPY | 2024 | 168 | 30 | 0.633333 | -0.033158 |
+| USDJPY | 2024 | 336 | 30 | 0.666667 | 0.235672 |
+| USDJPY | 2025 | 24 | 45 | 0.511111 | -0.029068 |
+| USDJPY | 2025 | 168 | 44 | 0.659091 | 0.382437 |
+| USDJPY | 2025 | 336 | 43 | 0.558140 | 0.428628 |
+| XAGUSD | 2022 | 24 | 57 | 0.543860 | 0.251932 |
+| XAGUSD | 2022 | 168 | 57 | 0.543860 | 0.490718 |
+| XAGUSD | 2022 | 336 | 57 | 0.473684 | 0.470472 |
+| XAGUSD | 2023 | 24 | 50 | 0.440000 | -0.535841 |
+| XAGUSD | 2023 | 168 | 50 | 0.460000 | -0.645703 |
+| XAGUSD | 2023 | 336 | 50 | 0.380000 | -0.611960 |
+| XAGUSD | 2024 | 24 | 44 | 0.613636 | 0.338976 |
+| XAGUSD | 2024 | 168 | 44 | 0.590909 | 0.577961 |
+| XAGUSD | 2024 | 336 | 44 | 0.613636 | 1.365608 |
+| XAGUSD | 2025 | 24 | 27 | 0.444444 | -0.327248 |
+| XAGUSD | 2025 | 168 | 27 | 0.814815 | 2.230924 |
+| XAGUSD | 2025 | 336 | 27 | 0.703704 | 3.195777 |
+| XAUUSD | 2022 | 24 | 49 | 0.530612 | 0.087744 |
+| XAUUSD | 2022 | 168 | 49 | 0.632653 | 0.230019 |
+| XAUUSD | 2022 | 336 | 49 | 0.530612 | 0.242650 |
+| XAUUSD | 2023 | 24 | 44 | 0.522727 | 0.134913 |
+| XAUUSD | 2023 | 168 | 44 | 0.431818 | 0.111925 |
+| XAUUSD | 2023 | 336 | 44 | 0.500000 | 0.440632 |
+| XAUUSD | 2024 | 24 | 29 | 0.758621 | 0.218722 |
+| XAUUSD | 2024 | 168 | 29 | 0.724138 | 0.463448 |
+| XAUUSD | 2024 | 336 | 29 | 0.758621 | 1.511695 |
+| XAUUSD | 2025 | 24 | 25 | 0.600000 | 0.125884 |
+| XAUUSD | 2025 | 168 | 24 | 0.625000 | 1.138227 |
+| XAUUSD | 2025 | 336 | 24 | 0.666667 | 1.548180 |
+
+## 10. By symbol x session
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| symbol | analysis_session_scope | horizon_h | n_signals | win_rate | mean_forward_return_pct | median_forward_return_pct |
+| --- | --- | --- | --- | --- | --- | --- |
+| BRENTCMDUSD | all_sessions | 24 | 297 | 0.454545 | -0.255995 | -0.151091 |
+| BRENTCMDUSD | all_sessions | 168 | 297 | 0.525253 | 0.045696 | 0.288226 |
+| BRENTCMDUSD | all_sessions | 336 | 296 | 0.564189 | 0.229145 | 0.404702 |
+| BRENTCMDUSD | london_only | 24 | 49 | 0.469388 | 0.136743 | -0.120088 |
+| BRENTCMDUSD | london_only | 168 | 49 | 0.530612 | 0.222518 | 0.891373 |
+| BRENTCMDUSD | london_only | 336 | 48 | 0.520833 | -0.025721 | 0.146595 |
+| BRENTCMDUSD | london_or_newyork | 24 | 86 | 0.465116 | -0.088600 | -0.136482 |
+| BRENTCMDUSD | london_or_newyork | 168 | 86 | 0.511628 | -0.034444 | 0.180384 |
+| BRENTCMDUSD | london_or_newyork | 336 | 85 | 0.482353 | -0.727249 | -0.826315 |
+| EURJPY | all_sessions | 24 | 152 | 0.427632 | -0.089906 | -0.081388 |
+| EURJPY | all_sessions | 168 | 149 | 0.557047 | 0.035510 | 0.196443 |
+| EURJPY | all_sessions | 336 | 148 | 0.608108 | 0.205806 | 0.268293 |
+| EURJPY | london_only | 24 | 26 | 0.384615 | -0.090654 | -0.160733 |
+| EURJPY | london_only | 168 | 24 | 0.458333 | -0.134907 | -0.108596 |
+| EURJPY | london_only | 336 | 24 | 0.541667 | 0.209162 | 0.129984 |
+| EURJPY | london_or_newyork | 24 | 54 | 0.425926 | -0.090597 | -0.101699 |
+| EURJPY | london_or_newyork | 168 | 52 | 0.480769 | -0.254731 | -0.108596 |
+| EURJPY | london_or_newyork | 336 | 52 | 0.480769 | -0.001600 | -0.055045 |
+| GBPJPY | all_sessions | 24 | 145 | 0.537931 | -0.014466 | 0.035892 |
+| GBPJPY | all_sessions | 168 | 145 | 0.544828 | -0.074587 | 0.092251 |
+| GBPJPY | all_sessions | 336 | 145 | 0.565517 | 0.047523 | 0.191369 |
+| GBPJPY | london_only | 24 | 29 | 0.448276 | -0.001861 | -0.088400 |
+| GBPJPY | london_only | 168 | 29 | 0.482759 | -0.445679 | -0.005996 |
+| GBPJPY | london_only | 336 | 29 | 0.482759 | -0.262423 | -0.089281 |
+| GBPJPY | london_or_newyork | 24 | 58 | 0.534483 | 0.045307 | 0.031519 |
+| GBPJPY | london_or_newyork | 168 | 58 | 0.551724 | -0.307829 | 0.083273 |
+| GBPJPY | london_or_newyork | 336 | 58 | 0.534483 | -0.105676 | 0.099873 |
+| LIGHTCMDUSD | all_sessions | 24 | 202 | 0.470297 | -0.169120 | -0.104234 |
+| LIGHTCMDUSD | all_sessions | 168 | 202 | 0.524752 | -0.135048 | 0.246992 |
+| LIGHTCMDUSD | all_sessions | 336 | 202 | 0.504950 | -0.251962 | 0.114776 |
+| LIGHTCMDUSD | london_only | 24 | 57 | 0.421053 | -0.274426 | -0.340082 |
+| LIGHTCMDUSD | london_only | 168 | 57 | 0.631579 | 0.895472 | 1.111383 |
+| LIGHTCMDUSD | london_only | 336 | 57 | 0.543860 | 0.860045 | 0.482442 |
+| LIGHTCMDUSD | london_or_newyork | 24 | 84 | 0.404762 | -0.364361 | -0.329223 |
+| LIGHTCMDUSD | london_or_newyork | 168 | 84 | 0.583333 | 0.024356 | 0.813251 |
+| LIGHTCMDUSD | london_or_newyork | 336 | 84 | 0.511905 | -0.048428 | 0.167086 |
+| USDJPY | all_sessions | 24 | 148 | 0.445946 | -0.091851 | -0.070771 |
+| USDJPY | all_sessions | 168 | 147 | 0.639456 | 0.212631 | 0.376432 |
+| USDJPY | all_sessions | 336 | 146 | 0.630137 | 0.362570 | 0.678410 |
+| USDJPY | london_only | 24 | 24 | 0.583333 | 0.062132 | 0.078319 |
+| USDJPY | london_only | 168 | 24 | 0.625000 | 0.283680 | 0.389651 |
+| USDJPY | london_only | 336 | 23 | 0.565217 | 0.422362 | 0.935007 |
+| USDJPY | london_or_newyork | 24 | 52 | 0.442308 | -0.066620 | -0.080562 |
+| USDJPY | london_or_newyork | 168 | 52 | 0.576923 | 0.172815 | 0.325868 |
+| USDJPY | london_or_newyork | 336 | 51 | 0.568627 | 0.278827 | 0.566713 |
+| XAGUSD | all_sessions | 24 | 178 | 0.516854 | -0.035689 | 0.072702 |
+| XAGUSD | all_sessions | 168 | 178 | 0.573034 | 0.457028 | 0.825750 |
+| XAGUSD | all_sessions | 336 | 178 | 0.516854 | 0.801077 | 0.444192 |
+| XAGUSD | london_only | 24 | 54 | 0.518519 | -0.169266 | 0.055499 |
+| XAGUSD | london_only | 168 | 54 | 0.500000 | -0.002505 | -0.013131 |
+| XAGUSD | london_only | 336 | 54 | 0.537037 | 0.896281 | 0.721618 |
+| XAGUSD | london_or_newyork | 24 | 71 | 0.521127 | -0.023561 | 0.072039 |
+| XAGUSD | london_or_newyork | 168 | 71 | 0.521127 | 0.136316 | 0.111478 |
+| XAGUSD | london_or_newyork | 336 | 71 | 0.563380 | 1.121917 | 0.972037 |
+| XAUUSD | all_sessions | 24 | 147 | 0.585034 | 0.134188 | 0.116392 |
+| XAUUSD | all_sessions | 168 | 146 | 0.589041 | 0.390090 | 0.393937 |
+| XAUUSD | all_sessions | 336 | 146 | 0.589041 | 0.768994 | 0.426212 |
+| XAUUSD | london_only | 24 | 29 | 0.448276 | -0.225385 | -0.151047 |
+| XAUUSD | london_only | 168 | 29 | 0.517241 | -0.065679 | 0.174114 |
+| XAUUSD | london_only | 336 | 29 | 0.551724 | 0.632250 | 0.273712 |
+| XAUUSD | london_or_newyork | 24 | 51 | 0.568627 | 0.041117 | 0.060162 |
+| XAUUSD | london_or_newyork | 168 | 51 | 0.529412 | 0.108977 | 0.246468 |
+| XAUUSD | london_or_newyork | 336 | 51 | 0.549020 | 0.623176 | 0.273712 |
+
+## 11. 24h vs 168h comparison
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+- overall_win_rate_delta_168h_minus_24h: `0.072335`
+- directional_improves_168h_vs_24h: `True`
+
+## 12. Keep / watch / cut
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+| symbol | session_scope | n_24h | n_168h | win_rate_24h | win_rate_168h | mean_return_24h | mean_return_168h | action | rationale |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BRENTCMDUSD | all_sessions | 297 | 297 | 0.454545 | 0.525253 | -0.255995 | 0.045696 | KEEP | win-rate &gt;52% with positive forward returns |
+| BRENTCMDUSD | london_only | 49 | 49 | 0.469388 | 0.530612 | 0.136743 | 0.222518 | KEEP | win-rate &gt;52% with positive forward returns |
+| BRENTCMDUSD | london_or_newyork | 86 | 86 | 0.465116 | 0.511628 | -0.088600 | -0.034444 | WATCH | mixed or borderline directional profile |
+| EURJPY | all_sessions | 152 | 149 | 0.427632 | 0.557047 | -0.089906 | 0.035510 | KEEP | win-rate &gt;52% with positive forward returns |
+| EURJPY | london_only | 26 | 24 | 0.384615 | 0.458333 | -0.090654 | -0.134907 | CUT | sub-50% directional profile and weak forward returns |
+| EURJPY | london_or_newyork | 54 | 52 | 0.425926 | 0.480769 | -0.090597 | -0.254731 | CUT | sub-50% directional profile and weak forward returns |
+| GBPJPY | all_sessions | 145 | 145 | 0.537931 | 0.544828 | -0.014466 | -0.074587 | WATCH | mixed or borderline directional profile |
+| GBPJPY | london_only | 29 | 29 | 0.448276 | 0.482759 | -0.001861 | -0.445679 | CUT | sub-50% directional profile and weak forward returns |
+| GBPJPY | london_or_newyork | 58 | 58 | 0.534483 | 0.551724 | 0.045307 | -0.307829 | KEEP | win-rate &gt;52% with positive forward returns |
+| LIGHTCMDUSD | all_sessions | 202 | 202 | 0.470297 | 0.524752 | -0.169120 | -0.135048 | WATCH | mixed or borderline directional profile |
+| LIGHTCMDUSD | london_only | 57 | 57 | 0.421053 | 0.631579 | -0.274426 | 0.895472 | KEEP | win-rate &gt;52% with positive forward returns |
+| LIGHTCMDUSD | london_or_newyork | 84 | 84 | 0.404762 | 0.583333 | -0.364361 | 0.024356 | KEEP | win-rate &gt;52% with positive forward returns |
+| USDJPY | all_sessions | 148 | 147 | 0.445946 | 0.639456 | -0.091851 | 0.212631 | KEEP | win-rate &gt;52% with positive forward returns |
+| USDJPY | london_only | 24 | 24 | 0.583333 | 0.625000 | 0.062132 | 0.283680 | KEEP | win-rate &gt;52% with positive forward returns |
+| USDJPY | london_or_newyork | 52 | 52 | 0.442308 | 0.576923 | -0.066620 | 0.172815 | KEEP | win-rate &gt;52% with positive forward returns |
+| XAGUSD | all_sessions | 178 | 178 | 0.516854 | 0.573034 | -0.035689 | 0.457028 | KEEP | win-rate &gt;52% with positive forward returns |
+| XAGUSD | london_only | 54 | 54 | 0.518519 | 0.500000 | -0.169266 | -0.002505 | WATCH | mixed or borderline directional profile |
+| XAGUSD | london_or_newyork | 71 | 71 | 0.521127 | 0.521127 | -0.023561 | 0.136316 | KEEP | win-rate &gt;52% with positive forward returns |
+| XAUUSD | all_sessions | 147 | 146 | 0.585034 | 0.589041 | 0.134188 | 0.390090 | KEEP | win-rate &gt;52% with positive forward returns |
+| XAUUSD | london_only | 29 | 29 | 0.448276 | 0.517241 | -0.225385 | -0.065679 | WATCH | mixed or borderline directional profile |
+| XAUUSD | london_or_newyork | 51 | 51 | 0.568627 | 0.529412 | 0.041117 | 0.108977 | KEEP | win-rate &gt;52% with positive forward returns |
+
+## 13. Final answer: is there directional edge?
+- truth_label_block: `UNVERIFIED_PYTHON_APPROXIMATION`
+- directional_edge_exists_over_4y: `True`
+
+## Final Questions
+1. At 24h, is price above entry more than 50% of the time? `False`
+2. At 168h, is price above entry more than 50% of the time? `True`
+3. Which symbol is strongest? `USDJPY` @ `168h` (win_rate=0.639456, n=147)
+4. Which session is strongest? `all_sessions` @ `336h` (win_rate=0.563838, n=1261)
+5. Is London-only better than London+NY? `True` (168h london=0.541353, london_or_newyork=0.537445)
+6. Does XAUUSD have directional edge? `True`
+7. Does XAGUSD have directional edge? `True`
+8. Does EURUSD deserve inclusion? `False`
+9. Is there a real 4-year directional edge anywhere? `True`
+</pre></body></html>

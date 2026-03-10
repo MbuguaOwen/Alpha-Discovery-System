@@ -14,7 +14,6 @@ from .pine16_research import classify_signals, classify_trades, load_truth_datas
 from .pine16_truth import TruthLabel, TruthMode, normalize_truth_mode
 
 DEFAULT_TARGET_HORIZONS_H: Tuple[int, int] = (24, 72)
-TARGET_SYMBOLS = {"XAUUSD", "XAGUSD", "EURUSD"}
 SESSION_SCOPES = ("all_sessions", "london_only", "london_or_newyork")
 
 
@@ -275,15 +274,11 @@ def _build_master_for_config(
     else:
         cfg.timeframe = str(cfg.timeframe).strip().lower()
     _ = timeframe_to_minutes(cfg.timeframe)
-    cfg.symbols = [s for s in cfg.symbols if str(s) in TARGET_SYMBOLS]
-
     trades, signals, truth_label, parity_metrics, exact_available = load_truth_datasets(cfg, truth_mode, exact_dir)
     if signals.empty and not trades.empty:
         signals = trades[["symbol", "timeframe", "bar_time_utc", "entry_time_utc", "entry_price"]].copy()
     _ = classify_signals(signals, truth_label=truth_label, config_pack=cfg.metadata.config_pack)
     tr = classify_trades(trades, truth_label=truth_label, config_pack=cfg.metadata.config_pack)
-    tr = tr[tr["symbol"].astype(str).isin(TARGET_SYMBOLS)].copy() if not tr.empty else tr
-
     meta = {
         "config_pack": cfg.metadata.config_pack,
         "truth_label": truth_label.value,

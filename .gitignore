@@ -36,6 +36,8 @@ data/derived/*
 !data/derived/pine16_exact/
 data/derived/pine16_exact/*
 !data/derived/pine16_exact/forward_sign_24h_72h_master.parquet
+!data/derived/pine16_exact/forward_sign_24h_168h_336h_master_watchlist_m15_allsessions.parquet
+!data/derived/pine16_exact/forward_sign_24h_168h_336h_master_watchlist_m30_allsessions.parquet
 
 # Reports/outputs: ignore by default, keep current locked finding artifacts
 outputs/*
@@ -44,7 +46,16 @@ outputs/*
 outputs/reports/*
 !outputs/reports/FINDING_LOCKED_PINE16_FORWARD_SIGN_24H_72H.md
 !outputs/reports/pine16_forward_sign_24h_72h_*
+!outputs/reports/watchlist_data_completeness_2022_2026.csv
+!outputs/reports/pine16_watchlist_london_ny_summary_24h_168h_336h.csv
+!outputs/reports/pine16_watchlist_london_ny_action_changes_vs_all_sessions_24h_168h_336h.csv
+!outputs/reports/pine16_watchlist_london_ny_336h_yearly_consistency.csv
+!outputs/reports/pine16_watchlist_execution_matrix_london_ny.csv
+!outputs/reports/pine16_watchlist_london_ny_validation_24h_168h_336h.md
+!outputs/reports_watchlist_m15_allsessions_24h_168h_336h/
+!outputs/reports_watchlist_m15_allsessions_24h_168h_336h/*
+!outputs/reports_watchlist_m30_allsessions_24h_168h_336h/
+!outputs/reports_watchlist_m30_allsessions_24h_168h_336h/*
 !outputs/submission/
 outputs/submission/*
 !outputs/submission/pine16_forward_sign_LOCKED_FINDING_CLEAN_*.zip
-
