@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .data import load_bars_for_symbol, timeframe_to_minutes
+from .indicators import atr
 from .pine16_config import Pine16ExactConfig, load_pine16_exact_config, to_legacy_run_config
 from .pine16_research import classify_signals, classify_trades, load_truth_datasets
 from .pine16_truth import TruthLabel, TruthMode, normalize_truth_mode
@@ -59,6 +60,8 @@ def _empty_master_frame(horizons_hours: Sequence[int]) -> pd.DataFrame:
         "config_pack",
         "entry_time",
         "entry_price",
+        "stop_price",
+        "risk_distance",
         "entry_session_bucket",
         "setup_session_bucket",
         "entry_in_london_or_newyork",
@@ -70,6 +73,7 @@ def _empty_master_frame(horizons_hours: Sequence[int]) -> pd.DataFrame:
                 f"close_{hh}h",
                 f"forward_return_{hh}h_abs",
                 f"forward_return_{hh}h_pct",
+                f"actual_return_{hh}h_r",
                 f"outcome_{hh}h",
             ]
         )
@@ -190,6 +194,7 @@ def _t_stat_mean(x: pd.Series) -> float:
 
 def _aggregate_group(g: pd.DataFrame) -> Dict[str, object]:
     ret = pd.to_numeric(g["forward_return_pct"], errors="coerce").dropna()
+    ret_r = pd.to_numeric(g.get("actual_return_r"), errors="coerce").dropna() if "actual_return_r" in g.columns else pd.Series(dtype=float)
     n = int(ret.shape[0])
     if n == 0:
         return {
@@ -209,6 +214,9 @@ def _aggregate_group(g: pd.DataFrame) -> Dict[str, object]:
             "t_stat_mean_return": np.nan,
             "win_rate_ci95_low": np.nan,
             "win_rate_ci95_high": np.nan,
+            "mean_actual_return_r": np.nan,
+            "median_actual_return_r": np.nan,
+            "std_actual_return_r": np.nan,
         }
     gv = g.loc[ret.index]
     wins = int((gv["outcome"] == "WIN").sum())
@@ -232,6 +240,9 @@ def _aggregate_group(g: pd.DataFrame) -> Dict[str, object]:
         "t_stat_mean_return": _t_stat_mean(ret),
         "win_rate_ci95_low": ci_lo,
         "win_rate_ci95_high": ci_hi,
+        "mean_actual_return_r": float(ret_r.mean()) if not ret_r.empty else np.nan,
+        "median_actual_return_r": float(ret_r.median()) if not ret_r.empty else np.nan,
+        "std_actual_return_r": float(ret_r.std(ddof=1)) if ret_r.shape[0] > 1 else np.nan,
     }
 
 
@@ -308,7 +319,10 @@ def _build_master_for_config(
             continue
 
         times = pd.to_datetime(bars["time"], utc=True)
+        high = bars["high"].to_numpy(dtype=float)
+        low = bars["low"].to_numpy(dtype=float)
         close = bars["close"].to_numpy(dtype=float)
+        atr_arr = atr(high, low, close, int(cfg.risk.atrLen))
         idx = pd.Index(times).get_indexer(
             pd.to_datetime(sym_tr["entry_time_utc"], utc=True, errors="coerce"),
             method="nearest",
@@ -338,10 +352,23 @@ def _build_master_for_config(
                 "config_pack": str(cfg.metadata.config_pack),
                 "entry_time": pd.to_datetime(sym_tr.at[j, "entry_time_utc"], utc=True, errors="coerce"),
                 "entry_price": float(ep),
+                "stop_price": np.nan,
+                "risk_distance": np.nan,
                 "entry_session_bucket": str(sym_tr.at[j, "entry_session_bucket"]),
                 "setup_session_bucket": str(sym_tr.at[j, "setup_session_bucket"]),
                 "entry_in_london_or_newyork": int(pd.to_numeric(sym_tr.at[j, "entry_in_london_or_newyork"], errors="coerce")),
             }
+            stop_price = float(pd.to_numeric(sym_tr.get("sl_price"), errors="coerce").iloc[j]) if "sl_price" in sym_tr.columns else np.nan
+            risk_distance = float(abs(ep - stop_price)) if np.isfinite(stop_price) else np.nan
+            if not np.isfinite(risk_distance) or risk_distance <= 0.0:
+                atr_entry = float(pd.to_numeric(sym_tr.get("atr_entry"), errors="coerce").iloc[j]) if "atr_entry" in sym_tr.columns else np.nan
+                if not np.isfinite(atr_entry) or atr_entry <= 0.0:
+                    atr_entry = float(atr_arr[ei]) if ei < len(atr_arr) else np.nan
+                if np.isfinite(atr_entry) and atr_entry > 0.0:
+                    risk_distance = float(cfg.risk.slAtrMult) * float(atr_entry)
+                    stop_price = float(ep - risk_distance)
+            row["stop_price"] = stop_price
+            row["risk_distance"] = risk_distance
             for h in horizons:
                 bars_fwd = int((h * 60) // tf_minutes)
                 end = ei + bars_fwd
@@ -349,14 +376,17 @@ def _build_master_for_config(
                     row[f"close_{h}h"] = np.nan
                     row[f"forward_return_{h}h_abs"] = np.nan
                     row[f"forward_return_{h}h_pct"] = np.nan
+                    row[f"actual_return_{h}h_r"] = np.nan
                     row[f"outcome_{h}h"] = "MISSING"
                     continue
                 close_h = float(close[end])
                 ret_abs = float(close_h - ep)
                 ret_pct = float((ret_abs / ep) * 100.0)
+                ret_r = float(ret_abs / risk_distance) if np.isfinite(risk_distance) and risk_distance > 0.0 else np.nan
                 row[f"close_{h}h"] = close_h
                 row[f"forward_return_{h}h_abs"] = ret_abs
                 row[f"forward_return_{h}h_pct"] = ret_pct
+                row[f"actual_return_{h}h_r"] = ret_r
                 row[f"outcome_{h}h"] = _classify_outcome(ret_pct, mode=classification_mode, neutral_band_pct=neutral_band_pct)
             rows.append(row)
 
@@ -376,6 +406,7 @@ def _stack_horizons(expanded: pd.DataFrame, horizons_hours: Sequence[int]) -> pd
         ret_col = f"forward_return_{int(h)}h_pct"
         abs_col = f"forward_return_{int(h)}h_abs"
         close_col = f"close_{int(h)}h"
+        r_col = f"actual_return_{int(h)}h_r"
         out_col = f"outcome_{int(h)}h"
         tmp = expanded[
             [
@@ -390,6 +421,8 @@ def _stack_horizons(expanded: pd.DataFrame, horizons_hours: Sequence[int]) -> pd
                 "config_pack",
                 "entry_time",
                 "entry_price",
+                "stop_price",
+                "risk_distance",
                 "entry_session_bucket",
                 "setup_session_bucket",
                 "entry_in_london_or_newyork",
@@ -397,6 +430,7 @@ def _stack_horizons(expanded: pd.DataFrame, horizons_hours: Sequence[int]) -> pd
                 close_col,
                 ret_col,
                 abs_col,
+                r_col,
                 out_col,
             ]
         ].copy()
@@ -404,6 +438,7 @@ def _stack_horizons(expanded: pd.DataFrame, horizons_hours: Sequence[int]) -> pd
         tmp["close_at_horizon"] = pd.to_numeric(tmp[close_col], errors="coerce")
         tmp["forward_return_pct"] = pd.to_numeric(tmp[ret_col], errors="coerce")
         tmp["forward_return_abs"] = pd.to_numeric(tmp[abs_col], errors="coerce")
+        tmp["actual_return_r"] = pd.to_numeric(tmp[r_col], errors="coerce")
         tmp["outcome"] = tmp[out_col].astype(str)
         parts.append(tmp)
     return pd.concat(parts, ignore_index=True, sort=False)
@@ -555,19 +590,19 @@ def _render_report(
         "",
         f"## 4. {h1}h overall results",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(overall[overall["horizon_h"] == h1], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
+        _md_table(overall[overall["horizon_h"] == h1], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "mean_actual_return_r", "median_forward_return_pct", "median_actual_return_r", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
         "",
         f"## 5. {h2}h overall results",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(overall[overall["horizon_h"] == h2], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
+        _md_table(overall[overall["horizon_h"] == h2], ["horizon_h", "n_signals", "win_rate", "loss_rate", "flat_rate", "mean_forward_return_pct", "mean_actual_return_r", "median_forward_return_pct", "median_actual_return_r", "win_rate_ci95_low", "win_rate_ci95_high", "win_rate_band"]),
         "",
         "## 6. By symbol",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(by_symbol, ["symbol", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_band"]),
+        _md_table(by_symbol, ["symbol", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "mean_actual_return_r", "median_forward_return_pct", "median_actual_return_r", "win_rate_band"]),
         "",
         "## 7. By session",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(by_session, ["analysis_session_scope", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "median_forward_return_pct", "win_rate_band"]),
+        _md_table(by_session, ["analysis_session_scope", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "mean_actual_return_r", "median_forward_return_pct", "median_actual_return_r", "win_rate_band"]),
         "",
         "## 8. By year",
         f"- truth_label_block: `{block_truth}`",
@@ -579,7 +614,7 @@ def _render_report(
         "",
         "## 10. By symbol x session",
         f"- truth_label_block: `{block_truth}`",
-        _md_table(by_symbol_session, ["symbol", "analysis_session_scope", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "median_forward_return_pct"]),
+        _md_table(by_symbol_session, ["symbol", "analysis_session_scope", "horizon_h", "n_signals", "win_rate", "mean_forward_return_pct", "mean_actual_return_r", "median_forward_return_pct", "median_actual_return_r"]),
         "",
         f"## 11. {h1}h vs {h2}h comparison",
         f"- truth_label_block: `{block_truth}`",

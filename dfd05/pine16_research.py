@@ -182,8 +182,12 @@ def load_truth_datasets(
         cache_ok = True
         if not parity_trades.empty and "config_pack" in parity_trades.columns:
             cache_ok = bool(parity_trades["config_pack"].astype(str).eq(str(cfg.metadata.config_pack)).all())
+        if cache_ok and not parity_trades.empty and "timeframe" in parity_trades.columns:
+            cache_ok = bool(parity_trades["timeframe"].astype(str).str.lower().eq(str(cfg.timeframe).lower()).all())
         if cache_ok and not parity_signals.empty and "config_pack" in parity_signals.columns:
             cache_ok = bool(parity_signals["config_pack"].astype(str).eq(str(cfg.metadata.config_pack)).all())
+        if cache_ok and not parity_signals.empty and "timeframe" in parity_signals.columns:
+            cache_ok = bool(parity_signals["timeframe"].astype(str).str.lower().eq(str(cfg.timeframe).lower()).all())
         if not cache_ok:
             parity_trades = pd.DataFrame()
             parity_signals = pd.DataFrame()
